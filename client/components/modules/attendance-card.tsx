@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { apiPost } from "@/lib/api";
 
 type AttendanceCardProps = {
@@ -13,6 +13,13 @@ export function AttendanceCard({ initialCheckedIn = false }: AttendanceCardProps
   const [message, setMessage] = useState(
     initialCheckedIn ? "You are currently checked in." : "Start the day when you're ready."
   );
+
+  useEffect(() => {
+    setCheckedIn(initialCheckedIn);
+    setMessage(
+      initialCheckedIn ? "You are currently checked in." : "Start the day when you're ready."
+    );
+  }, [initialCheckedIn]);
 
   const handleAttendance = async () => {
     try {

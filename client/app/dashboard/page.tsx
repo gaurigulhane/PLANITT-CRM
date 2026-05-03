@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CRMShell } from "@/components/layout/crm-shell";
+import { AttendanceCard } from "@/components/modules/attendance-card";
 import { StatePanel } from "@/components/shared/state-panel";
 import { renderSessionGate } from "@/components/shared/session-gate";
 import { useRealtimeRefresh } from "@/hooks/use-realtime-refresh";
@@ -2427,6 +2428,10 @@ export default function DashboardPage() {
             </div>
           </div>
         </Surface>
+
+        {summary.scope === "employee" ? (
+          <AttendanceCard initialCheckedIn={(summary as EmployeeDashboardSummary).metrics.checkedIn} />
+        ) : null}
 
         <Surface className="p-2">
           <div className="grid grid-cols-2 gap-2">
