@@ -2,7 +2,7 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import prisma from "../config/db.js";
 import { sendSafeError } from "../middleware/error.middleware.js";
-import { getJwtSecret } from "../config/security.js";
+import { getJwtSecret, normalizeOrigin } from "../config/security.js";
 import { verifyGoogleIdToken } from "../utils/google-token.js";
 import { clearAuthCookie, setAuthCookie } from "../utils/auth-cookie.js";
 
@@ -18,7 +18,7 @@ function getGoogleLoginConfig() {
     clientId: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
     redirectUri: process.env.GOOGLE_LOGIN_REDIRECT_URI || process.env.GOOGLE_REDIRECT_URI,
-    clientUrl: process.env.CLIENT_URL || "http://localhost:3000",
+    clientUrl: normalizeOrigin(process.env.CLIENT_URL || "https://planitt-crm-client.vercel.app"),
   };
 }
 

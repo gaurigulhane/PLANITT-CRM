@@ -111,7 +111,7 @@ export function CRMShell({ children, user }: CRMShellProps) {
 
   return (
     <div
-      className={`min-h-screen overflow-x-hidden text-[var(--text-main)] ${darkWorkspace ? "crm-shell-dark" : ""}`}
+      className={`min-h-screen min-w-0 overflow-x-clip text-[var(--text-main)] ${darkWorkspace ? "crm-shell-dark" : ""}`}
       style={{
         background:
           "linear-gradient(135deg, color-mix(in srgb, var(--app-bg) 92%, white), var(--app-bg-accent))",
@@ -254,7 +254,7 @@ export function CRMShell({ children, user }: CRMShellProps) {
           </div>
         </aside>
 
-        <main className="min-w-0 flex-1">
+        <main className="min-h-0 min-w-0 flex-1">
           <header
             className="mb-3 flex flex-col gap-3 rounded-lg border px-4 py-3 md:flex-row md:items-center md:justify-between"
             style={{

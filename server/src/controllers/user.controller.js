@@ -494,40 +494,58 @@ export async function updateUserAssignment(req, res) {
       return res.status(403).json({ error: "Only the CEO can assign superadmin access" });
     }
 
-    if (departmentId) {
-      const department = await prisma.department.findUnique({
-        where: { id: departmentId },
-      });
+    /** Only touch fields the client sends — avoids clearing manager/dept when updating role only. */
+    const data = {};
 
-      if (!department) {
-        return res.status(404).json({ error: "Department not found" });
-      }
+    if (typeof designation === "string") {
+      data.designation = designation;
     }
 
-    if (managerId) {
-      const manager = await prisma.user.findUnique({
-        where: { id: managerId },
-      });
+    if (typeof role === "string" && role.trim()) {
+      data.role = role.trim();
+    }
 
-      if (!manager || !["SUPERADMIN", "ADMIN", "MANAGER"].includes(manager.role)) {
-        return res.status(400).json({ error: "Selected manager is invalid" });
-      }
+    if (Object.prototype.hasOwnProperty.call(req.body, "departmentId")) {
+      const rawDept = departmentId;
+      const nextDeptId = typeof rawDept === "string" && rawDept.trim() ? rawDept.trim() : null;
+      if (nextDeptId) {
+        const department = await prisma.department.findUnique({
+          where: { id: nextDeptId },
+        });
 
-      if (manager.id === req.params.id) {
-        return res.status(400).json({ error: "A user cannot report to themselves" });
+        if (!department) {
+          return res.status(404).json({ error: "Department not found" });
+        }
       }
+      data.departmentId = nextDeptId;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body, "managerId")) {
+      const rawMgr = managerId;
+      const nextManagerId = typeof rawMgr === "string" && rawMgr.trim() ? rawMgr.trim() : null;
+      if (nextManagerId) {
+        const manager = await prisma.user.findUnique({
+          where: { id: nextManagerId },
+        });
+
+        if (!manager || !["SUPERADMIN", "ADMIN", "MANAGER"].includes(manager.role)) {
+          return res.status(400).json({ error: "Selected manager is invalid" });
+        }
+
+        if (manager.id === req.params.id) {
+          return res.status(400).json({ error: "A user cannot report to themselves" });
+        }
+      }
+      data.managerId = nextManagerId;
+    }
+
+    if (Object.keys(data).length === 0) {
+      return res.status(400).json({ error: "No assignment fields to update" });
     }
 
     const user = await prisma.user.update({
       where: { id: req.params.id },
-      data: {
-        ...(role ? { role } : {}),
-        ...(typeof designation === "string" ? { designation } : {}),
-        ...(typeof departmentId === "string"
-          ? { departmentId: departmentId || null }
-          : {}),
-        ...(typeof managerId === "string" ? { managerId: managerId || null } : {}),
-      },
+      data,
       select: toPublicUserSelect(),
     });
 

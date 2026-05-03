@@ -1,4 +1,13 @@
-const DEFAULT_LOCAL_ORIGINS = ["http://localhost:3000", "http://127.0.0.1:3000"];
+/** Browser Origin header never includes a trailing slash — entries here must match exactly. */
+export function normalizeOrigin(origin) {
+  return origin.trim().replace(/\/+$/, "");
+}
+
+const DEFAULT_LOCAL_ORIGINS = [
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  "https://planitt-crm-client.vercel.app",
+].map((o) => normalizeOrigin(o));
 
 export function getRequiredEnv(name) {
   const value = process.env[name];
@@ -10,10 +19,6 @@ export function getRequiredEnv(name) {
 
 export function getJwtSecret() {
   return getRequiredEnv("JWT_SECRET");
-}
-
-function normalizeOrigin(origin) {
-  return origin.trim().replace(/\/+$/, "");
 }
 
 export function getAllowedCorsOrigins() {

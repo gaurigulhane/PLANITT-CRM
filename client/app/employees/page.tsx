@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { CRMShell } from "@/components/layout/crm-shell";
-import { StatePanel } from "@/components/shared/state-panel";
 import { renderSessionGate } from "@/components/shared/session-gate";
 import { useRealtimeRefresh } from "@/hooks/use-realtime-refresh";
 import { useSession } from "@/hooks/use-session";
 import { apiGet, apiPost, apiPostForm, apiPut } from "@/lib/api";
 import type { BulkUserUploadResult, CRMUser, Department, UserRole } from "@/types/crm";
+
 type PaginatedResponse<T> = { items: T[]; total: number; hasMore: boolean; nextOffset: number };
 
 const baseRoles: UserRole[] = ["EMPLOYEE", "INTERN", "MANAGER", "ADMIN"];
@@ -17,14 +17,23 @@ const bulkUploadTemplate = [
   "Meera Singh,meera@planitt.com,TempPass@123,INTERN,Design Intern,Design,manager@planitt.com",
 ].join("\n");
 
-function Surface({ children }: { children: ReactNode }) {
+function Surface({
+  children,
+  className = "",
+  style,
+}: {
+  children: ReactNode;
+  className?: string;
+  style?: CSSProperties;
+}) {
   return (
     <section
-      className="rounded-[20px] border p-5"
+      className={`rounded-2xl border p-5 sm:p-6 ${className}`}
       style={{
         background: "var(--surface)",
         borderColor: "var(--border)",
         boxShadow: "var(--shadow-soft)",
+        ...style,
       }}
     >
       {children}
@@ -32,15 +41,37 @@ function Surface({ children }: { children: ReactNode }) {
   );
 }
 
+function StatusBanner({ message, variant }: { message: string; variant: "success" | "error" }) {
+  const isError = variant === "error";
+  return (
+    <div
+      role="alert"
+      className="flex items-start gap-3 rounded-2xl border px-4 py-3 text-sm font-medium sm:px-5"
+      style={{
+        borderColor: isError ? "rgba(225,29,72,0.35)" : "rgba(16,185,129,0.35)",
+        background: isError ? "rgba(225,29,72,0.06)" : "rgba(16,185,129,0.08)",
+        color: isError ? "#be123c" : "#047857",
+      }}
+    >
+      <span className="mt-0.5 shrink-0 text-base" aria-hidden>
+        {isError ? "!" : "✓"}
+      </span>
+      <span>{message}</span>
+    </div>
+  );
+}
+
 export default function EmployeesPage() {
   const { user, loading: sessionLoading, error: sessionError, retry: retrySession } = useSession({
     allowedRoles: ["SUPERADMIN", "ADMIN", "MANAGER"],
   });
+  const bulkInputRef = useRef<HTMLInputElement>(null);
   const [users, setUsers] = useState<CRMUser[]>([]);
   const [allUsers, setAllUsers] = useState<CRMUser[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -51,7 +82,6 @@ export default function EmployeesPage() {
     managerId: "",
   });
   const [creating, setCreating] = useState(false);
-  const [notice, setNotice] = useState("");
   const [bulkFile, setBulkFile] = useState<File | null>(null);
   const [bulkUploading, setBulkUploading] = useState(false);
   const [bulkResult, setBulkResult] = useState<BulkUserUploadResult | null>(null);
@@ -148,6 +178,13 @@ export default function EmployeesPage() {
     URL.revokeObjectURL(url);
   };
 
+  const resetBulkFileInput = () => {
+    setBulkFile(null);
+    if (bulkInputRef.current) {
+      bulkInputRef.current.value = "";
+    }
+  };
+
   const uploadBulkUsers = async () => {
     if (!bulkFile) {
       setError("Choose a CSV file before uploading.");
@@ -168,7 +205,7 @@ export default function EmployeesPage() {
           ? `Created ${result.createdCount} members. ${result.failedCount} rows need attention.`
           : `Created ${result.createdCount} team members successfully.`
       );
-      setBulkFile(null);
+      resetBulkFileInput();
       await loadTeam(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to bulk upload team members");
@@ -186,12 +223,19 @@ export default function EmployeesPage() {
       setUpdatingId(member.id);
       setError("");
       setNotice("");
-      await apiPut(`/users/${member.id}/assignment`, {
-        managerId: field === "managerId" ? value : member.manager?.id ?? "",
-        departmentId: field === "departmentId" ? value : member.department?.id ?? "",
-        role: field === "role" ? value : member.role,
+      const body: Record<string, string> = {
         designation: member.designation ?? "",
-      });
+      };
+      if (field === "role") {
+        body.role = value;
+      }
+      if (field === "departmentId") {
+        body.departmentId = value;
+      }
+      if (field === "managerId") {
+        body.managerId = value;
+      }
+      await apiPut(`/users/${member.id}/assignment`, body);
       await loadTeam(false);
       setNotice("Assignment updated successfully.");
     } catch (err) {
@@ -243,6 +287,9 @@ export default function EmployeesPage() {
     return member.manager?.role === "ADMIN" || member.manager?.role === "MANAGER";
   };
 
+  const canEditDirectory = user?.role === "SUPERADMIN" || user?.role === "ADMIN";
+  const canCreateUsers = user?.role === "SUPERADMIN" || user?.role === "ADMIN";
+
   const sessionGate = renderSessionGate({
     loading: sessionLoading,
     user,
@@ -261,18 +308,25 @@ export default function EmployeesPage() {
 
   return (
     <CRMShell user={user}>
-      <div className="space-y-4">
-        <Surface>
+      <div className="mx-auto max-w-6xl space-y-5 pb-8">
+        <Surface
+          className="relative overflow-hidden"
+          style={{
+            background:
+              "linear-gradient(135deg, color-mix(in srgb, var(--surface) 88%, var(--accent-strong)), var(--surface))",
+          }}
+        >
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-faint)]">
             Team control
           </p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-[var(--text-main)]">
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight text-[var(--text-main)] sm:text-3xl">
             Employees & interns
           </h1>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--text-soft)]">
-            Create members, assign departments, and connect employees or interns to their reporting managers.
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[var(--text-soft)]">
+            Create members, assign departments, and connect people to their reporting managers. Edits save
+            immediately.
           </p>
-          <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-5">
             {[
               { label: "Total members", value: peopleAnalytics.total },
               { label: "Employees", value: peopleAnalytics.employees },
@@ -282,263 +336,315 @@ export default function EmployeesPage() {
             ].map((item) => (
               <div
                 key={item.label}
-                className="rounded-2xl border px-4 py-3"
-                style={{ borderColor: "var(--border)", background: "var(--surface-soft)" }}
+                className="rounded-xl border px-3 py-2.5 sm:rounded-2xl sm:px-4 sm:py-3"
+                style={{ borderColor: "var(--border)", background: "color-mix(in srgb, var(--surface) 70%, white)" }}
               >
-                <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--text-faint)]">{item.label}</p>
-                <p className="mt-2 text-xl font-semibold text-[var(--text-main)]">{item.value}</p>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-faint)] sm:text-[11px]">
+                  {item.label}
+                </p>
+                <p className="mt-1 text-lg font-semibold tabular-nums text-[var(--text-main)] sm:text-xl">
+                  {item.value}
+                </p>
               </div>
             ))}
           </div>
         </Surface>
 
-        <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
-          <Surface>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-faint)]">
-                  Create team member
-                </p>
-                <h2 className="mt-2 text-xl font-semibold text-[var(--text-main)]">
-                  Add employee or intern
-                </h2>
+        {error ? <StatusBanner variant="error" message={error} /> : null}
+        {notice ? <StatusBanner variant="success" message={notice} /> : null}
+
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,380px)_minmax(0,1fr)] xl:items-start xl:gap-6">
+          <div className="flex min-w-0 flex-col gap-5 xl:sticky xl:top-4">
+            <Surface>
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-faint)]">
+                    Create team member
+                  </p>
+                  <h2 className="mt-1 text-lg font-semibold text-[var(--text-main)] sm:text-xl">
+                    Add employee or intern
+                  </h2>
+                </div>
+                {canCreateUsers ? (
+                  <span
+                    className="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold text-white sm:text-xs"
+                    style={{ background: "var(--accent-strong)" }}
+                  >
+                    Admin only
+                  </span>
+                ) : null}
               </div>
-              <span
-                className="rounded-full px-3 py-1 text-xs font-semibold text-white"
-                style={{ background: "var(--accent-strong)" }}
-              >
-                Admin only
-              </span>
-            </div>
 
-            {user.role === "MANAGER" ? (
-              <div
-                className="mt-6 rounded-3xl border border-dashed p-6 text-sm"
-                style={{
-                  borderColor: "var(--border)",
-                  background: "var(--surface-soft)",
-                  color: "var(--text-soft)",
-                }}
-              >
-                Managers can view their team, but only admins and the CEO can create new employees and interns.
-              </div>
-            ) : (
-              <div className="mt-6 grid gap-4">
-                <input
-                  className="h-12 rounded-2xl border px-4 outline-none"
-                  style={fieldStyle}
-                  placeholder="Full name"
-                  value={form.name}
-                  onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
-                />
-                <input
-                  className="h-12 rounded-2xl border px-4 outline-none"
-                  style={fieldStyle}
-                  placeholder="Work email"
-                  value={form.email}
-                  onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
-                />
-                <input
-                  className="h-12 rounded-2xl border px-4 outline-none"
-                  style={fieldStyle}
-                  placeholder="Temporary password"
-                  value={form.password}
-                  onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
-                />
-                <select
-                  className="h-12 rounded-2xl border px-4 outline-none"
-                  style={fieldStyle}
-                  value={form.role}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, role: event.target.value as UserRole }))
-                  }
-                >
-                  {availableRoles.map((role) => (
-                    <option key={role} value={role}>
-                      {role}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  className="h-12 rounded-2xl border px-4 outline-none"
-                  style={fieldStyle}
-                  placeholder="Designation"
-                  value={form.designation}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, designation: event.target.value }))
-                  }
-                />
-                <select
-                  className="h-12 rounded-2xl border px-4 outline-none"
-                  style={fieldStyle}
-                  value={form.departmentId}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, departmentId: event.target.value }))
-                  }
-                >
-                  <option value="">Select department</option>
-                  {departments.map((department) => (
-                    <option key={department.id} value={department.id}>
-                      {department.name}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  className="h-12 rounded-2xl border px-4 outline-none"
-                  style={fieldStyle}
-                  value={form.managerId}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, managerId: event.target.value }))
-                  }
-                >
-                  <option value="">Select manager</option>
-                  {managers.map((manager) => (
-                    <option key={manager.id} value={manager.id}>
-                      {manager.name} - {manager.role}
-                    </option>
-                  ))}
-                </select>
-
-                {error ? <p className="text-sm font-medium text-rose-600">{error}</p> : null}
-                {notice ? <p className="text-sm font-medium text-emerald-600">{notice}</p> : null}
-
-                <button
-                  type="button"
-                  disabled={creating}
-                  onClick={() => void createEmployee()}
-                  className="h-12 rounded-2xl text-sm font-semibold text-white transition disabled:cursor-wait disabled:opacity-70"
-                  style={{ background: "var(--accent-strong)" }}
-                >
-                  {creating ? "Creating..." : "Create team member"}
-                </button>
-
+              {user.role === "MANAGER" ? (
                 <div
-                  className="rounded-[24px] border p-4"
-                  style={{ borderColor: "var(--border)", background: "var(--surface-soft)" }}
+                  className="mt-5 rounded-2xl border border-dashed p-4 text-sm leading-relaxed"
+                  style={{
+                    borderColor: "var(--border)",
+                    background: "var(--surface-soft)",
+                    color: "var(--text-soft)",
+                  }}
                 >
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-faint)]">
-                        Bulk upload
-                      </p>
-                      <h3 className="mt-2 text-lg font-semibold text-[var(--text-main)]">
-                        Upload employees and interns by CSV
-                      </h3>
-                      <p className="mt-2 text-sm leading-6 text-[var(--text-soft)]">
-                        Use this for faster onboarding. Supported roles in bulk upload are `EMPLOYEE`
-                        and `INTERN`.
-                      </p>
+                  Managers can view their team here. Only admins and the CEO can create accounts or run bulk
+                  import.
+                </div>
+              ) : (
+                <div className="mt-5 flex flex-col gap-3">
+                  <input
+                    className="h-11 w-full min-w-0 rounded-xl border px-3 text-sm outline-none sm:h-12 sm:rounded-2xl sm:px-4"
+                    style={fieldStyle}
+                    placeholder="Full name"
+                    value={form.name}
+                    onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+                  />
+                  <input
+                    className="h-11 w-full min-w-0 rounded-xl border px-3 text-sm outline-none sm:h-12 sm:rounded-2xl sm:px-4"
+                    style={fieldStyle}
+                    placeholder="Work email"
+                    value={form.email}
+                    onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
+                  />
+                  <input
+                    className="h-11 w-full min-w-0 rounded-xl border px-3 text-sm outline-none sm:h-12 sm:rounded-2xl sm:px-4"
+                    style={fieldStyle}
+                    placeholder="Temporary password"
+                    value={form.password}
+                    onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
+                  />
+                  <select
+                    className="h-11 w-full min-w-0 rounded-xl border px-3 text-sm outline-none sm:h-12 sm:rounded-2xl sm:px-4"
+                    style={fieldStyle}
+                    value={form.role}
+                    onChange={(event) =>
+                      setForm((current) => ({ ...current, role: event.target.value as UserRole }))
+                    }
+                  >
+                    {availableRoles.map((role) => (
+                      <option key={role} value={role}>
+                        {role}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    className="h-11 w-full min-w-0 rounded-xl border px-3 text-sm outline-none sm:h-12 sm:rounded-2xl sm:px-4"
+                    style={fieldStyle}
+                    placeholder="Designation"
+                    value={form.designation}
+                    onChange={(event) =>
+                      setForm((current) => ({ ...current, designation: event.target.value }))
+                    }
+                  />
+                  <select
+                    className="h-11 w-full min-w-0 rounded-xl border px-3 text-sm outline-none sm:h-12 sm:rounded-2xl sm:px-4"
+                    style={fieldStyle}
+                    value={form.departmentId}
+                    onChange={(event) =>
+                      setForm((current) => ({ ...current, departmentId: event.target.value }))
+                    }
+                  >
+                    <option value="">Select department</option>
+                    {departments.map((department) => (
+                      <option key={department.id} value={department.id}>
+                        {department.name}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    className="h-11 w-full min-w-0 rounded-xl border px-3 text-sm outline-none sm:h-12 sm:rounded-2xl sm:px-4"
+                    style={fieldStyle}
+                    value={form.managerId}
+                    onChange={(event) =>
+                      setForm((current) => ({ ...current, managerId: event.target.value }))
+                    }
+                  >
+                    <option value="">Select manager</option>
+                    {managers.map((manager) => (
+                      <option key={manager.id} value={manager.id}>
+                        {manager.name} — {manager.role}
+                      </option>
+                    ))}
+                  </select>
+
+                  <button
+                    type="button"
+                    disabled={creating}
+                    onClick={() => void createEmployee()}
+                    className="h-11 w-full rounded-xl text-sm font-semibold text-white transition hover:opacity-95 disabled:cursor-wait disabled:opacity-70 sm:h-12 sm:rounded-2xl"
+                    style={{ background: "var(--accent-strong)" }}
+                  >
+                    {creating ? "Creating…" : "Create team member"}
+                  </button>
+
+                  <div
+                    className="mt-2 rounded-2xl border p-4 sm:rounded-3xl sm:p-5"
+                    style={{ borderColor: "var(--border)", background: "var(--surface-soft)" }}
+                  >
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-faint)]">
+                          Bulk upload
+                        </p>
+                        <h3 className="mt-1 text-base font-semibold text-[var(--text-main)] sm:text-lg">
+                          Import from CSV
+                        </h3>
+                        <p className="mt-2 text-xs leading-relaxed text-[var(--text-soft)] sm:text-sm">
+                          Roles in CSV must be <code className="rounded bg-black/5 px-1">EMPLOYEE</code> or{" "}
+                          <code className="rounded bg-black/5 px-1">INTERN</code>.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={downloadBulkTemplate}
+                        className="shrink-0 rounded-xl border px-3 py-2 text-xs font-semibold sm:text-sm"
+                        style={{ borderColor: "var(--border)", color: "var(--text-main)" }}
+                      >
+                        Sample CSV
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={downloadBulkTemplate}
-                      className="rounded-xl border px-4 py-2 text-sm font-semibold"
-                      style={{ borderColor: "var(--border)", color: "var(--text-main)" }}
+
+                    <details className="mt-3">
+                      <summary className="cursor-pointer text-xs font-semibold text-[var(--accent-strong)]">
+                        View column format
+                      </summary>
+                      <pre className="mt-2 max-h-40 overflow-auto rounded-xl border p-3 text-[10px] leading-relaxed text-[var(--text-soft)] sm:text-xs">
+                        {bulkUploadTemplate}
+                      </pre>
+                    </details>
+
+                    <label
+                      className="mt-4 flex cursor-pointer flex-col gap-2 rounded-xl border-2 border-dashed px-4 py-6 text-center transition hover:border-blue-400/50 sm:rounded-2xl"
+                      onDragOver={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                      }}
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        const file = event.dataTransfer.files?.[0];
+                        if (file && (file.type === "text/csv" || file.name.toLowerCase().endsWith(".csv"))) {
+                          setBulkFile(file);
+                        } else if (event.dataTransfer.files?.[0]) {
+                          setError("Please drop a .csv file.");
+                        }
+                      }}
                     >
-                      Download sample CSV
-                    </button>
-                  </div>
+                      <span className="text-sm font-semibold text-[var(--text-main)]">Drop a file or browse</span>
+                      <span className="text-xs text-[var(--text-soft)]">
+                        {bulkFile ? bulkFile.name : "No file selected — .csv up to 2MB"}
+                      </span>
+                      <input
+                        ref={bulkInputRef}
+                        type="file"
+                        accept=".csv,text/csv"
+                        className="sr-only"
+                        onChange={(event) => setBulkFile(event.target.files?.[0] ?? null)}
+                      />
+                    </label>
 
-                  <div className="mt-4 rounded-2xl border p-4" style={fieldStyle}>
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-faint)]">
-                      CSV format
-                    </p>
-                    <pre className="mt-3 overflow-x-auto whitespace-pre-wrap text-xs leading-6 text-[var(--text-soft)]">
-                      {bulkUploadTemplate}
-                    </pre>
-                    <p className="mt-3 text-xs leading-5 text-[var(--text-faint)]">
-                      `department` can be the department name, code, or id. `managerEmail` should be
-                      an existing admin or manager email. `designation` is optional.
-                    </p>
-                  </div>
-
-                  <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-                    <input
-                      type="file"
-                      accept=".csv,text/csv"
-                      className="block w-full text-sm text-[var(--text-soft)] file:mr-4 file:rounded-xl file:border-0 file:px-4 file:py-2 file:font-semibold file:text-white"
-                      style={{ color: "var(--text-soft)" } as const}
-                      onChange={(event) => setBulkFile(event.target.files?.[0] ?? null)}
-                    />
                     <button
                       type="button"
                       disabled={bulkUploading || !bulkFile}
                       onClick={() => void uploadBulkUsers()}
-                      className="h-11 rounded-2xl px-5 text-sm font-semibold text-white transition disabled:cursor-wait disabled:opacity-70"
+                      className="mt-3 h-11 w-full rounded-xl text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-50 sm:rounded-2xl"
                       style={{ background: "var(--accent-strong)" }}
                     >
-                      {bulkUploading ? "Uploading..." : "Upload CSV"}
+                      {bulkUploading ? "Uploading…" : "Upload CSV"}
                     </button>
+
+                    {bulkResult ? (
+                      <div
+                        className="mt-4 rounded-xl border p-3 text-sm"
+                        style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+                      >
+                        <p className="font-semibold text-[var(--text-main)]">
+                          {bulkResult.createdCount} created · {bulkResult.failedCount} failed
+                        </p>
+                        {bulkResult.errors.length ? (
+                          <ul className="mt-2 max-h-36 list-inside list-disc space-y-1 overflow-y-auto text-xs text-rose-600">
+                            {bulkResult.errors.slice(0, 8).map((item) => (
+                              <li key={`${item.row}-${item.email ?? "row"}`}>
+                                Row {item.row}
+                                {item.email ? ` (${item.email})` : ""}: {item.message}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
-
-                  {bulkResult ? (
-                    <div
-                      className="mt-4 rounded-2xl border p-4 text-sm"
-                      style={{ borderColor: "var(--border)", background: "var(--surface)" }}
-                    >
-                      <p className="font-semibold text-[var(--text-main)]">
-                        Upload summary: {bulkResult.createdCount} created, {bulkResult.failedCount} failed
-                      </p>
-                      {bulkResult.errors.length ? (
-                        <div className="mt-3 space-y-2 text-xs text-rose-600">
-                          {bulkResult.errors.slice(0, 6).map((item) => (
-                            <p key={`${item.row}-${item.email ?? "row"}`}>
-                              Row {item.row}
-                              {item.email ? ` (${item.email})` : ""}: {item.message}
-                            </p>
-                          ))}
-                          {bulkResult.errors.length > 6 ? (
-                            <p className="text-[var(--text-faint)]">
-                              Showing first 6 issues. Fix the CSV and retry the remaining rows.
-                            </p>
-                          ) : null}
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
                 </div>
-              </div>
-            )}
-          </Surface>
+              )}
+            </Surface>
+          </div>
 
-          <Surface>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <Surface className="min-w-0">
+            <div className="flex flex-wrap items-end justify-between gap-2">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-faint)]">
                   Directory
                 </p>
-                <h2 className="mt-2 text-xl font-semibold text-[var(--text-main)]">Current team</h2>
+                <h2 className="mt-1 text-lg font-semibold text-[var(--text-main)] sm:text-xl">Current team</h2>
               </div>
-              <span className="text-sm text-[var(--text-soft)]">{users.length} members</span>
+              <span className="text-sm text-[var(--text-soft)]">{users.length} shown</span>
             </div>
 
-            <div className="mt-6 overflow-x-auto rounded-[20px] border" style={{ borderColor: "var(--border)" }}>
-              <table className="min-w-full text-left">
-                <thead style={{ background: "var(--surface-soft)" }}>
-                  <tr className="text-xs uppercase tracking-[0.22em] text-[var(--text-faint)]">
-                    <th className="px-5 py-4 font-semibold">Name</th>
-                    <th className="px-5 py-4 font-semibold">Email</th>
-                    <th className="px-5 py-4 font-semibold">Role</th>
-                    <th className="px-5 py-4 font-semibold">Department</th>
-                    <th className="px-5 py-4 font-semibold">Manager</th>
-                    <th className="px-5 py-4 font-semibold">Meet</th>
-                    <th className="px-5 py-4 font-semibold">Drive</th>
-                  </tr>
-                </thead>
-                <tbody style={{ background: "var(--surface-strong)" }}>
-                  {users.map((member) => (
-                    <tr key={member.id} className="border-t" style={{ borderColor: "var(--border)", color: "var(--text-soft)" }}>
-                      <td className="px-5 py-4">
-                        <div className="font-medium text-[var(--text-main)]">{member.name}</div>
-                        <div className="mt-1 text-xs font-medium text-[var(--text-faint)]">
-                          {member.designation || "No designation"}
-                        </div>
-                      </td>
-                      <td className="px-5 py-4">
-                        {user.role === "SUPERADMIN" || user.role === "ADMIN" ? (
-                          <div className="flex min-w-[260px] items-center gap-2">
+            {dataLoading ? (
+              <p className="mt-6 text-sm text-[var(--text-soft)]">Loading team…</p>
+            ) : users.length === 0 ? (
+              <p className="mt-6 rounded-xl border border-dashed p-8 text-center text-sm text-[var(--text-soft)]">
+                No team members yet.
+              </p>
+            ) : (
+              <ul className="mt-5 grid list-none gap-4 p-0 sm:grid-cols-1">
+                {users.map((member) => (
+                  <li
+                    key={member.id}
+                    className="rounded-2xl border p-4 sm:p-5"
+                    style={{
+                      borderColor: "var(--border)",
+                      background: "var(--surface-strong)",
+                      boxShadow: "0 1px 0 color-mix(in srgb, var(--border) 60%, transparent)",
+                    }}
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-[var(--text-main)]">{member.name}</p>
+                        <p className="mt-0.5 text-xs text-[var(--text-faint)]">
+                          {member.designation?.trim() || "No designation"}
+                        </p>
+                      </div>
+                      {user.role === "MANAGER" || member.role === "SUPERADMIN" ? (
+                        <span
+                          className="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide sm:text-xs"
+                          style={{ background: "var(--surface-soft)", color: "var(--text-soft)" }}
+                        >
+                          {member.role}
+                        </span>
+                      ) : (
+                        <select
+                          className="min-w-[8rem] max-w-full rounded-xl border px-2 py-1.5 text-xs font-semibold sm:min-w-[9rem]"
+                          style={fieldStyle}
+                          value={member.role}
+                          disabled={updatingId === member.id}
+                          onChange={(event) => void assignEmployee(member, "role", event.target.value)}
+                        >
+                          {availableRoles.map((role) => (
+                            <option key={role} value={role}>
+                              {role}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+
+                    <div className="mt-4 space-y-3">
+                      <div>
+                        <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-[var(--text-faint)]">
+                          Email
+                        </label>
+                        {canEditDirectory ? (
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
                             <input
-                              className="h-9 flex-1 rounded-xl border px-3 text-xs outline-none"
+                              className="min-h-11 min-w-0 flex-1 rounded-xl border px-3 text-sm outline-none"
                               style={fieldStyle}
                               value={emailDrafts[member.id] ?? member.email}
                               disabled={
@@ -554,7 +660,7 @@ export default function EmployeesPage() {
                             />
                             <button
                               type="button"
-                              className="rounded-xl px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                              className="h-11 shrink-0 rounded-xl px-4 text-sm font-semibold text-white disabled:opacity-50 sm:w-auto"
                               style={{ background: "var(--accent-strong)" }}
                               disabled={
                                 emailUpdatingId === member.id ||
@@ -563,124 +669,97 @@ export default function EmployeesPage() {
                               }
                               onClick={() => void updateMemberEmail(member)}
                             >
-                              {emailUpdatingId === member.id ? "Saving..." : "Update"}
+                              {emailUpdatingId === member.id ? "Saving…" : "Save email"}
                             </button>
                           </div>
                         ) : (
-                          member.email
+                          <p className="text-sm text-[var(--text-soft)]">{member.email}</p>
                         )}
-                      </td>
-                      <td className="px-5 py-4">
-                        {user.role === "MANAGER" || member.role === "SUPERADMIN" ? (
-                          <span
-                            className="rounded-full px-3 py-1 text-xs font-semibold"
-                            style={{ background: "var(--surface-soft)", color: "var(--text-soft)" }}
-                          >
-                            {member.role}
-                          </span>
-                        ) : (
-                          <select
-                            className="rounded-2xl border px-3 py-2 text-xs font-semibold"
-                            style={fieldStyle}
-                            value={member.role}
-                            disabled={updatingId === member.id}
-                            onChange={(event) =>
-                              void assignEmployee(member, "role", event.target.value)
-                            }
-                          >
-                            {availableRoles.map((role) => (
-                              <option key={role} value={role}>
-                                {role}
-                              </option>
-                            ))}
-                          </select>
-                        )}
-                      </td>
-                      <td className="px-5 py-4">
-                        {user.role === "MANAGER" ? (
-                          member.department?.name || "-"
-                        ) : (
-                          <select
-                            className="rounded-2xl border px-3 py-2 text-xs"
-                            style={fieldStyle}
-                            value={member.department?.id ?? ""}
-                            disabled={updatingId === member.id || member.role === "SUPERADMIN"}
-                            onChange={(event) =>
-                              void assignEmployee(member, "departmentId", event.target.value)
-                            }
-                          >
-                            <option value="">Unassigned</option>
-                            {departments.map((department) => (
-                              <option key={department.id} value={department.id}>
-                                {department.name}
-                              </option>
-                            ))}
-                          </select>
-                        )}
-                      </td>
-                      <td className="px-5 py-4">
-                        {user.role === "MANAGER" ? (
-                          member.manager?.name || "-"
-                        ) : (
-                          <select
-                            className="rounded-2xl border px-3 py-2 text-xs"
-                            style={fieldStyle}
-                            value={member.manager?.id ?? ""}
-                            disabled={updatingId === member.id || member.role === "SUPERADMIN"}
-                            onChange={(event) =>
-                              void assignEmployee(member, "managerId", event.target.value)
-                            }
-                          >
-                            <option value="">Unassigned</option>
-                            {managers
-                              .filter((manager) => manager.id !== member.id)
-                              .map((manager) => (
-                                <option key={manager.id} value={manager.id}>
-                                  {manager.name}
+                      </div>
+
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div>
+                          <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-[var(--text-faint)]">
+                            Department
+                          </label>
+                          {user.role === "MANAGER" ? (
+                            <p className="text-sm text-[var(--text-soft)]">{member.department?.name || "—"}</p>
+                          ) : (
+                            <select
+                              className="h-11 w-full min-w-0 rounded-xl border px-3 text-sm outline-none"
+                              style={fieldStyle}
+                              value={member.department?.id ?? ""}
+                              disabled={updatingId === member.id || member.role === "SUPERADMIN"}
+                              onChange={(event) =>
+                                void assignEmployee(member, "departmentId", event.target.value)
+                              }
+                            >
+                              <option value="">Unassigned</option>
+                              {departments.map((department) => (
+                                <option key={department.id} value={department.id}>
+                                  {department.name}
                                 </option>
                               ))}
-                          </select>
-                        )}
-                      </td>
-                      <td className="px-5 py-4">
-                        {hasAssignedLeadershipLinks(member) ? (
+                            </select>
+                          )}
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-[var(--text-faint)]">
+                            Manager
+                          </label>
+                          {user.role === "MANAGER" ? (
+                            <p className="text-sm text-[var(--text-soft)]">{member.manager?.name || "—"}</p>
+                          ) : (
+                            <select
+                              className="h-11 w-full min-w-0 rounded-xl border px-3 text-sm outline-none"
+                              style={fieldStyle}
+                              value={member.manager?.id ?? ""}
+                              disabled={updatingId === member.id || member.role === "SUPERADMIN"}
+                              onChange={(event) =>
+                                void assignEmployee(member, "managerId", event.target.value)
+                              }
+                            >
+                              <option value="">Unassigned</option>
+                              {managers
+                                .filter((manager) => manager.id !== member.id)
+                                .map((manager) => (
+                                  <option key={manager.id} value={manager.id}>
+                                    {manager.name}
+                                  </option>
+                                ))}
+                            </select>
+                          )}
+                        </div>
+                      </div>
+
+                      {hasAssignedLeadershipLinks(member) ? (
+                        <div className="flex flex-wrap gap-3 border-t pt-3 text-xs font-semibold" style={{ borderColor: "var(--border)" }}>
                           <a
                             href="https://meet.google.com/"
                             target="_blank"
                             rel="noreferrer"
-                            className="text-xs font-semibold underline underline-offset-2"
-                            style={{ color: "var(--accent-strong)" }}
+                            className="text-[var(--accent-strong)] underline-offset-2 hover:underline"
                           >
-                            Open Meet
+                            Google Meet
                           </a>
-                        ) : (
-                          "-"
-                        )}
-                      </td>
-                      <td className="px-5 py-4">
-                        {hasAssignedLeadershipLinks(member) ? (
                           <a
                             href="https://drive.google.com/"
                             target="_blank"
                             rel="noreferrer"
-                            className="text-xs font-semibold underline underline-offset-2"
-                            style={{ color: "var(--accent-strong)" }}
+                            className="text-[var(--accent-strong)] underline-offset-2 hover:underline"
                           >
-                            Open Drive
+                            Google Drive
                           </a>
-                        ) : (
-                          "-"
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
 
-            {dataLoading ? <p className="mt-4 text-sm text-[var(--text-soft)]">Loading employees...</p> : null}
             {hasMoreUsers ? (
-              <div className="mt-4 flex justify-center">
+              <div className="mt-5 flex justify-center">
                 <button
                   type="button"
                   disabled={loadingMoreUsers}
@@ -691,7 +770,7 @@ export default function EmployeesPage() {
                   className="rounded-xl border px-4 py-2 text-sm font-semibold disabled:opacity-60"
                   style={{ borderColor: "var(--border)", color: "var(--text-main)" }}
                 >
-                  {loadingMoreUsers ? "Loading..." : "Load more members"}
+                  {loadingMoreUsers ? "Loading…" : "Load more"}
                 </button>
               </div>
             ) : null}

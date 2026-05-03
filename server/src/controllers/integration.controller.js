@@ -1,7 +1,7 @@
 import jwt from "jsonwebtoken";
 import prisma from "../config/db.js";
 import { sendSafeError } from "../middleware/error.middleware.js";
-import { getJwtSecret } from "../config/security.js";
+import { getJwtSecret, normalizeOrigin } from "../config/security.js";
 import { verifyGoogleIdToken } from "../utils/google-token.js";
 
 const GOOGLE_AUTH_BASE_URL = "https://accounts.google.com/o/oauth2/v2/auth";
@@ -24,7 +24,7 @@ function getEnvConfig() {
     clientId: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
     redirectUri: process.env.GOOGLE_REDIRECT_URI,
-    clientUrl: process.env.CLIENT_URL || "http://localhost:3000",
+    clientUrl: normalizeOrigin(process.env.CLIENT_URL || "https://planitt-crm-client.vercel.app"),
     workspaceOwnerUserId: process.env.GOOGLE_WORKSPACE_OWNER_USER_ID || "",
     driveRootFolderId: process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID || "",
   };
