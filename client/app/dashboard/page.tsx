@@ -1380,7 +1380,6 @@ function GoogleWorkspacePanel({
                   disabled={
                     !workspaceReady ||
                     actionLoading === "meet" ||
-                    computedAudienceIds.length === 0 ||
                     (meetTargetMode === "project" && !selectedProjectId)
                   }
                   className="rounded-2xl px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
@@ -1487,7 +1486,7 @@ function GoogleWorkspacePanel({
                   {meetTargetMode === "project"
                     ? selectedProject?.department?.name
                       ? `Will invite all members in ${selectedProject.department.name}.`
-                      : "Selected project has no department."
+                      : "This project has no department, so there are no auto-invites. You can still create a Meet link, or change “Meet for” above."
                     : meetTargetMode === "department"
                       ? selectedMeetDepartmentName
                         ? `Will invite all members in ${selectedMeetDepartmentName}.`
@@ -1728,15 +1727,6 @@ export default function DashboardPage() {
   const [error, setError] = useState("");
 
   const leadershipView = summary?.scope === "admin" || summary?.scope === "superadmin";
-  const filterWorkspaceProjectsByScope = (scope: DashboardSummary["scope"], projects: Project[]) => {
-    if (scope !== "admin") {
-      return projects;
-    }
-    if (!user?.id) {
-      return [];
-    }
-    return projects.filter((project) => project.owner?.id === user.id);
-  };
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -1893,7 +1883,7 @@ export default function DashboardPage() {
           apiGet<{ items: Project[] }>("/projects?paginate=true&limit=100&offset=0"),
           apiGet<{ items: CRMUser[] }>("/users?paginate=true&limit=120&offset=0"),
         ]);
-        const projectData = filterWorkspaceProjectsByScope(summary.scope, projectPage.items);
+        const projectData = projectPage.items;
         const userData = userPage.items;
         setWorkspaceStatus(statusData);
         setWorkspaceProjects(projectData);
@@ -1961,7 +1951,7 @@ export default function DashboardPage() {
             apiGet<{ items: Project[] }>("/projects?paginate=true&limit=100&offset=0"),
             apiGet<{ items: CRMUser[] }>("/users?paginate=true&limit=120&offset=0"),
           ]);
-          const projects = filterWorkspaceProjectsByScope(freshSummary.scope, projectPage.items);
+          const projects = projectPage.items;
           const users = userPage.items;
           setWorkspaceStatus(workspace);
           setWorkspaceProjects(projects);
