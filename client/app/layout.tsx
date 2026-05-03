@@ -13,9 +13,15 @@ const manrope = Manrope({
   adjustFontFallback: true,
 });
 
+/** Set in Vercel (or .env.local) after Google Search Console → HTML tag verification gives you the content value. */
+const googleSiteVerification = process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION?.trim();
+
 export const metadata: Metadata = {
   title: "Planitt CRM",
   description: "Internal CRM for sales, follow-ups, and team workflows.",
+  ...(googleSiteVerification
+    ? { verification: { google: googleSiteVerification } }
+    : {}),
 };
 
 export const viewport: Viewport = {
