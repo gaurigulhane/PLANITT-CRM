@@ -2,6 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CRMShell } from "@/components/layout/crm-shell";
+import { useCrmSearch } from "@/components/providers/crm-search-provider";
+import {
+  MemberPickerToolbar,
+  filterMembersForPicker,
+  sortedUniqueRoles,
+  type MemberRoleFilter,
+} from "@/components/shared/member-picker-toolbar";
 import { AttendanceCard } from "@/components/modules/attendance-card";
 import { StatePanel } from "@/components/shared/state-panel";
 import { renderSessionGate } from "@/components/shared/session-gate";
@@ -1100,21 +1107,14 @@ function GoogleWorkspacePanel({
   onCreateDriveFolder: () => void;
   onSetMessage: (value: string) => void;
 }) {
-  if (loading) {
-    return (
-      <StatePanel
-        title="Loading Google Workspace"
-        description="Checking Google Meet, Sheets, and Drive connection status."
-      />
-    );
-  }
-
   const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? null;
   const [sharingAsset, setSharingAsset] = useState<"" | "meet" | "drive">("");
   const [uploadingDriveFile, setUploadingDriveFile] = useState(false);
   const driveFileInputRef = useRef<HTMLInputElement | null>(null);
   const [meetTargetMode, setMeetTargetMode] = useState<"project" | "department" | "all_departments">("project");
   const [selectedMeetDepartmentId, setSelectedMeetDepartmentId] = useState("");
+  const [meetAttendeeQuery, setMeetAttendeeQuery] = useState("");
+  const [meetAttendeeRole, setMeetAttendeeRole] = useState<MemberRoleFilter>("ALL");
   const workspaceReady = Boolean(status?.connected);
   const departmentChoices = useMemo(() => {
     const map = new Map<string, string>();
@@ -1149,6 +1149,22 @@ function GoogleWorkspacePanel({
     selectedProject?.departmentId,
     users,
   ]);
+  const meetAudienceMembers = useMemo(
+    () => users.filter((member) => computedAudienceIds.includes(member.id)),
+    [users, computedAudienceIds]
+  );
+  const meetAttendeeRoleOptions = useMemo(
+    () => sortedUniqueRoles(meetAudienceMembers),
+    [meetAudienceMembers]
+  );
+  const filteredMeetAudience = useMemo(
+    () =>
+      filterMembersForPicker(meetAudienceMembers, {
+        searchQuery: meetAttendeeQuery,
+        roleFilter: meetAttendeeRole,
+      }),
+    [meetAudienceMembers, meetAttendeeQuery, meetAttendeeRole]
+  );
   const workspaceBadgeLabel = status?.connected
     ? "Connected"
     : status?.setupRequired
@@ -1234,6 +1250,15 @@ function GoogleWorkspacePanel({
       setUploadingDriveFile(false);
     }
   };
+
+  if (loading) {
+    return (
+      <StatePanel
+        title="Loading Google Workspace"
+        description="Checking Google Meet, Sheets, and Drive connection status."
+      />
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -1444,11 +1469,15 @@ function GoogleWorkspacePanel({
               </div>
 
               <div className="rounded-2xl border p-4" style={{ borderColor: "var(--border)", background: "var(--surface-soft)" }}>
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-faint)]">
                     Meet attendees
                   </p>
-                  <span className="text-xs text-[var(--text-soft)]">{computedAudienceIds.length} members</span>
+                  <span className="text-xs text-[var(--text-soft)]">
+                    {filteredMeetAudience.length === meetAudienceMembers.length
+                      ? `${meetAudienceMembers.length} members`
+                      : `${filteredMeetAudience.length} of ${meetAudienceMembers.length} shown`}
+                  </span>
                 </div>
                 <div className="mt-3 grid gap-2">
                   <label className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-faint)]">
@@ -1493,24 +1522,39 @@ function GoogleWorkspacePanel({
                         : "Select a department."
                       : "Will invite all members from all departments."}
                 </p>
+                <div className="mt-3">
+                  <MemberPickerToolbar
+                    searchQuery={meetAttendeeQuery}
+                    onSearchChange={setMeetAttendeeQuery}
+                    roleFilter={meetAttendeeRole}
+                    onRoleFilterChange={setMeetAttendeeRole}
+                    roleOptions={meetAttendeeRoleOptions}
+                  />
+                </div>
                 <div className="mt-3 grid max-h-52 gap-2 overflow-y-auto pr-1">
-                  {users.filter((member) => computedAudienceIds.includes(member.id)).map((member) => {
-                    return (
-                      <label
-                        key={member.id}
-                        className="flex items-center justify-between gap-3 rounded-2xl border px-3 py-2 text-sm"
-                        style={{ borderColor: "var(--border)", background: "var(--surface)" }}
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate font-medium text-[var(--text-main)]">{member.name}</p>
-                          <p className="truncate text-xs text-[var(--text-soft)]">{member.email}</p>
-                        </div>
-                        <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-faint)]">
-                          Included
-                        </span>
-                      </label>
-                    );
-                  })}
+                  {filteredMeetAudience.length === 0 ? (
+                    <p className="rounded-2xl border px-3 py-4 text-sm text-[var(--text-soft)]" style={{ borderColor: "var(--border)" }}>
+                      No people match this search. Clear filters to see the full attendee list.
+                    </p>
+                  ) : (
+                    filteredMeetAudience.map((member) => {
+                      return (
+                        <label
+                          key={member.id}
+                          className="flex items-center justify-between gap-3 rounded-2xl border px-3 py-2 text-sm"
+                          style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate font-medium text-[var(--text-main)]">{member.name}</p>
+                            <p className="truncate text-xs text-[var(--text-soft)]">{member.email}</p>
+                          </div>
+                          <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-faint)]">
+                            {formatRole(member.role)}
+                          </span>
+                        </label>
+                      );
+                    })
+                  )}
                 </div>
               </div>
             </div>
@@ -1706,8 +1750,10 @@ function GoogleWorkspacePanel({
 
 export default function DashboardPage() {
   const { user, loading, error: sessionError, retry: retrySession } = useSession();
+  const { globalSearch, setGlobalSearch } = useCrmSearch();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [teamMembers, setTeamMembers] = useState<CRMUser[]>([]);
+  const [teamDirectoryRoleFilter, setTeamDirectoryRoleFilter] = useState<MemberRoleFilter>("ALL");
   const [selectedMemberId, setSelectedMemberId] = useState("");
   const [selectedAnalytics, setSelectedAnalytics] = useState<UserAnalyticsSummary | null>(null);
   const [teamAnalyticsList, setTeamAnalyticsList] = useState<UserAnalyticsSummary[]>([]);
@@ -1727,6 +1773,28 @@ export default function DashboardPage() {
   const [error, setError] = useState("");
 
   const leadershipView = summary?.scope === "admin" || summary?.scope === "superadmin";
+
+  const teamDirectoryRoleOptions = useMemo(() => sortedUniqueRoles(teamMembers), [teamMembers]);
+  const filteredTeamMembers = useMemo(
+    () =>
+      filterMembersForPicker(teamMembers, {
+        searchQuery: globalSearch,
+        roleFilter: teamDirectoryRoleFilter,
+      }),
+    [teamMembers, globalSearch, teamDirectoryRoleFilter]
+  );
+
+  useEffect(() => {
+    if (!leadershipView) {
+      return;
+    }
+    setSelectedMemberId((current) => {
+      if (filteredTeamMembers.some((member) => member.id === current)) {
+        return current;
+      }
+      return filteredTeamMembers[0]?.id ?? "";
+    });
+  }, [leadershipView, filteredTeamMembers]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -2469,6 +2537,48 @@ export default function DashboardPage() {
                 ))}
               </section>
               <InsightTicker items={insightItems} />
+              {leadershipView ? (
+                <section className="space-y-4" id="team-directory">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-faint)]">
+                      Team directory
+                    </p>
+                    <h2 className="mt-2 text-2xl font-semibold text-[var(--text-main)]">Member performance</h2>
+                    <p className="mt-2 max-w-2xl text-sm text-[var(--text-soft)]">
+                      Use the header search or the filters below to find people. Select a card to load attendance,
+                      progress, and tasks for that person.
+                    </p>
+                  </div>
+                  <MemberPickerToolbar
+                    searchQuery={globalSearch}
+                    onSearchChange={setGlobalSearch}
+                    roleFilter={teamDirectoryRoleFilter}
+                    onRoleFilterChange={setTeamDirectoryRoleFilter}
+                    roleOptions={teamDirectoryRoleOptions}
+                  />
+                  {teamLoading ? (
+                    <StatePanel
+                      title="Loading team directory"
+                      description="Fetching people and baseline analytics."
+                    />
+                  ) : filteredTeamMembers.length === 0 ? (
+                    <StatePanel
+                      title="No matching team members"
+                      description="Try a different search or clear the role filter."
+                    />
+                  ) : (
+                    <TeamAnalyticsPanel
+                      members={filteredTeamMembers}
+                      selectedMemberId={selectedMemberId}
+                      selectedAnalytics={selectedAnalytics}
+                      analyticsLoading={analyticsLoading}
+                      directoryTitle="Roster"
+                      directorySubtitle="Live roster and analytics"
+                      onSelect={setSelectedMemberId}
+                    />
+                  )}
+                </section>
+              ) : null}
               <div className="grid gap-4 xl:grid-cols-2">
                 <LineChartCard
                   title={leadershipView ? "Organization work-hour trend" : "Personal work-hour trend"}

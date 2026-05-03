@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { CRMShell } from "@/components/layout/crm-shell";
+import { MemberPickerToolbar, filterMembersForPicker, sortedUniqueRoles, type MemberRoleFilter } from "@/components/shared/member-picker-toolbar";
 import { StatePanel } from "@/components/shared/state-panel";
 import { renderSessionGate } from "@/components/shared/session-gate";
 import { useRealtimeRefresh } from "@/hooks/use-realtime-refresh";
@@ -68,6 +69,8 @@ export default function ProjectsPage() {
     userIds: [] as string[],
     checklistText: "",
   });
+  const [projectAssignQuery, setProjectAssignQuery] = useState("");
+  const [projectAssignRole, setProjectAssignRole] = useState<MemberRoleFilter>("ALL");
 
   const fieldStyle = {
     borderColor: "var(--border)",
@@ -78,6 +81,19 @@ export default function ProjectsPage() {
   const assignableRoles = useMemo(
     () => (user ? getTaskAssignableRoles(user.role) : []),
     [user]
+  );
+  const projectAssignRoleOptions = useMemo(() => {
+    const pool = team.filter((member) => assignableRoles.includes(member.role));
+    return sortedUniqueRoles(pool);
+  }, [team, assignableRoles]);
+  const filteredProjectAssignees = useMemo(
+    () =>
+      filterMembersForPicker(team, {
+        searchQuery: projectAssignQuery,
+        roleFilter: projectAssignRole,
+        restrictToRoles: assignableRoles,
+      }),
+    [team, projectAssignQuery, projectAssignRole, assignableRoles]
   );
 
   const loadProjects = async (append = false) => {
@@ -589,10 +605,22 @@ export default function ProjectsPage() {
                       ? "Assign to team (including admins and managers)"
                       : "Assign to employees or interns"}
                   </p>
+                  <div className="mt-3">
+                    <MemberPickerToolbar
+                      searchQuery={projectAssignQuery}
+                      onSearchChange={setProjectAssignQuery}
+                      roleFilter={projectAssignRole}
+                      onRoleFilterChange={setProjectAssignRole}
+                      roleOptions={projectAssignRoleOptions}
+                    />
+                  </div>
                   <div className="mt-3 grid max-h-72 gap-3 overflow-auto sm:grid-cols-2">
-                    {team
-                      .filter((member) => assignableRoles.includes(member.role))
-                      .map((member) => (
+                    {filteredProjectAssignees.length === 0 ? (
+                      <p className="col-span-full rounded-2xl border px-4 py-6 text-sm text-[var(--text-soft)]" style={{ borderColor: "var(--border)" }}>
+                        No matches. Adjust search or role filter.
+                      </p>
+                    ) : (
+                      filteredProjectAssignees.map((member) => (
                         <label
                           key={member.id}
                           className="flex items-center gap-3 rounded-2xl border px-4 py-3 text-sm"
@@ -607,9 +635,12 @@ export default function ProjectsPage() {
                             checked={taskForm.userIds.includes(member.id)}
                             onChange={() => handleAssigneeToggle(member.id)}
                           />
-                          <span>{member.name} - {member.role}</span>
+                          <span>
+                            {member.name} - {member.role}
+                          </span>
                         </label>
-                      ))}
+                      ))
+                    )}
                   </div>
                 </div>
               </div>
@@ -728,23 +759,36 @@ export default function ProjectsPage() {
                                 setEditTaskForm((current) => ({ ...current, checklistText: event.target.value }))
                               }
                             />
-                            <div className="grid gap-2 sm:grid-cols-2">
-                              {team
-                                .filter((member) => assignableRoles.includes(member.role))
-                                .map((member) => (
-                                  <label
-                                    key={member.id}
-                                    className="flex items-center gap-3 rounded-2xl border px-3 py-2 text-sm"
-                                    style={{ borderColor: "var(--border)", background: "var(--surface-soft)", color: "var(--text-main)" }}
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      checked={editTaskForm.userIds.includes(member.id)}
-                                      onChange={() => toggleEditAssignee(member.id)}
-                                    />
-                                    <span>{member.name}</span>
-                                  </label>
-                                ))}
+                            <div className="grid gap-2">
+                              <MemberPickerToolbar
+                                searchQuery={projectAssignQuery}
+                                onSearchChange={setProjectAssignQuery}
+                                roleFilter={projectAssignRole}
+                                onRoleFilterChange={setProjectAssignRole}
+                                roleOptions={projectAssignRoleOptions}
+                              />
+                              <div className="grid gap-2 sm:grid-cols-2">
+                                {filteredProjectAssignees.length === 0 ? (
+                                  <p className="col-span-full rounded-2xl border px-3 py-4 text-sm text-[var(--text-soft)]" style={{ borderColor: "var(--border)" }}>
+                                    No matches. Adjust filters above.
+                                  </p>
+                                ) : (
+                                  filteredProjectAssignees.map((member) => (
+                                    <label
+                                      key={member.id}
+                                      className="flex items-center gap-3 rounded-2xl border px-3 py-2 text-sm"
+                                      style={{ borderColor: "var(--border)", background: "var(--surface-soft)", color: "var(--text-main)" }}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={editTaskForm.userIds.includes(member.id)}
+                                        onChange={() => toggleEditAssignee(member.id)}
+                                      />
+                                      <span>{member.name}</span>
+                                    </label>
+                                  ))
+                                )}
+                              </div>
                             </div>
                             <div className="flex gap-2">
                               <button

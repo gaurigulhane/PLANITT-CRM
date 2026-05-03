@@ -1,5 +1,6 @@
 import "../styles/globals.css";
 import { BackendKeepAlive } from "@/components/providers/backend-keepalive";
+import { CrmSearchProvider } from "@/components/providers/crm-search-provider";
 import { SocketProvider } from "@/components/providers/socket-provider";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { DEFAULT_CRM_THEME } from "@/lib/theme-storage";
@@ -47,7 +48,9 @@ export default function RootLayout({
       <body className={`${manrope.variable} font-sans antialiased`}>
         <ThemeProvider>
           <BackendKeepAlive />
-          <SocketProvider>{children}</SocketProvider>
+          <SocketProvider>
+            <CrmSearchProvider>{children}</CrmSearchProvider>
+          </SocketProvider>
         </ThemeProvider>
       </body>
     </html>

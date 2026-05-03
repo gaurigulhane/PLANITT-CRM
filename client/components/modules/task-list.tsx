@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { MemberPickerToolbar, filterMembersForPicker, sortedUniqueRoles, type MemberRoleFilter } from "@/components/shared/member-picker-toolbar";
 import { apiDelete, apiPost, apiPut } from "@/lib/api";
 import { getTaskAssignableRoles } from "@/lib/dashboard";
 import type { CRMUser, Task } from "@/types/crm";
@@ -47,6 +48,8 @@ export function TaskList({
     issueTitle: string;
     response: string;
   } | null>(null);
+  const [assigneePickQuery, setAssigneePickQuery] = useState("");
+  const [assigneePickRole, setAssigneePickRole] = useState<MemberRoleFilter>("ALL");
 
   useEffect(() => {
     if (!initialIssueTaskId) {
@@ -89,6 +92,19 @@ export function TaskList({
     user.role === "SUPERADMIN" || user.role === "ADMIN" || user.role === "MANAGER";
   const canEditTask = canRespondToIssues;
   const assignableRoles = getTaskAssignableRoles(user.role);
+  const assigneeRoleOptions = useMemo(() => {
+    const pool = team.filter((member) => assignableRoles.includes(member.role));
+    return sortedUniqueRoles(pool);
+  }, [team, assignableRoles]);
+  const filteredAssignees = useMemo(
+    () =>
+      filterMembersForPicker(team, {
+        searchQuery: assigneePickQuery,
+        roleFilter: assigneePickRole,
+        restrictToRoles: assignableRoles,
+      }),
+    [team, assigneePickQuery, assigneePickRole, assignableRoles]
+  );
 
   const openEditTask = (task: Task) => {
     setEditingTaskId(task.id);
@@ -437,23 +453,36 @@ export function TaskList({
                 }
               />
               {team.length ? (
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {team
-                    .filter((member) => assignableRoles.includes(member.role))
-                    .map((member) => (
-                      <label
-                        key={member.id}
-                        className="flex items-center gap-3 rounded-md border px-3 py-2 text-sm"
-                        style={{ borderColor: "var(--border)", background: "var(--surface)", color: "var(--text-main)" }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={editForms[task.id]?.userIds.includes(member.id) ?? false}
-                          onChange={() => handleEditAssigneeToggle(task.id, member.id)}
-                        />
-                        <span>{member.name}</span>
-                      </label>
-                    ))}
+                <div className="grid gap-2">
+                  <MemberPickerToolbar
+                    searchQuery={assigneePickQuery}
+                    onSearchChange={setAssigneePickQuery}
+                    roleFilter={assigneePickRole}
+                    onRoleFilterChange={setAssigneePickRole}
+                    roleOptions={assigneeRoleOptions}
+                  />
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {filteredAssignees.length === 0 ? (
+                      <p className="col-span-full rounded-md border px-3 py-4 text-sm text-[var(--text-soft)]" style={{ borderColor: "var(--border)" }}>
+                        No matches. Adjust search or role filter.
+                      </p>
+                    ) : (
+                      filteredAssignees.map((member) => (
+                        <label
+                          key={member.id}
+                          className="flex items-center gap-3 rounded-md border px-3 py-2 text-sm"
+                          style={{ borderColor: "var(--border)", background: "var(--surface)", color: "var(--text-main)" }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={editForms[task.id]?.userIds.includes(member.id) ?? false}
+                            onChange={() => handleEditAssigneeToggle(task.id, member.id)}
+                          />
+                          <span>{member.name}</span>
+                        </label>
+                      ))
+                    )}
+                  </div>
                 </div>
               ) : null}
               <div className="flex gap-2">

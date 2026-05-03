@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { apiPost } from "@/lib/api";
 import { clearToken } from "@/lib/auth";
+import { useCrmSearch } from "@/components/providers/crm-search-provider";
 import { useTheme } from "@/components/providers/theme-provider";
 import { useNotifications } from "@/hooks/use-notifications";
 import { migrateLegacyThemeKeys } from "@/lib/theme-storage";
@@ -46,6 +47,26 @@ function initials(name: string) {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("");
+}
+
+function CRMShellHeaderSearch() {
+  const { globalSearch, setGlobalSearch } = useCrmSearch();
+
+  return (
+    <label className="relative block">
+      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-[var(--text-faint)]">
+        Search
+      </span>
+      <input
+        aria-label="Search CRM"
+        type="search"
+        value={globalSearch}
+        onChange={(event) => setGlobalSearch(event.target.value)}
+        className="crm-input h-10 w-full rounded-md pl-16 pr-3 text-sm sm:w-72"
+        placeholder="Search anything..."
+      />
+    </label>
+  );
 }
 
 export function CRMShell({ children, user }: CRMShellProps) {
@@ -270,16 +291,7 @@ export function CRMShell({ children, user }: CRMShellProps) {
               <h1 className="mt-1 text-xl font-bold text-[var(--text-main)]">{pageTitle}</h1>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <label className="relative block">
-                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-[var(--text-faint)]">
-                  Search
-                </span>
-                <input
-                  aria-label="Search CRM"
-                  className="crm-input h-10 w-full rounded-md pl-16 pr-3 text-sm sm:w-72"
-                  placeholder="Search anything..."
-                />
-              </label>
+              <CRMShellHeaderSearch />
               <div className="flex items-center gap-2">
                 <div className="relative">
                   <button

@@ -7,8 +7,9 @@ import { StatePanel } from "@/components/shared/state-panel";
 import { renderSessionGate } from "@/components/shared/session-gate";
 import { useRealtimeRefresh } from "@/hooks/use-realtime-refresh";
 import { useSession } from "@/hooks/use-session";
+import { MemberPickerToolbar, filterMembersForPicker, sortedUniqueRoles, type MemberRoleFilter } from "@/components/shared/member-picker-toolbar";
 import { apiGet, apiPost } from "@/lib/api";
-import { isAdminRole } from "@/lib/dashboard";
+import { getTaskAssignableRoles, isAdminRole } from "@/lib/dashboard";
 import { useSearchParams } from "next/navigation";
 import type { CRMUser, Task } from "@/types/crm";
 type PaginatedResponse<T> = { items: T[]; total: number; hasMore: boolean; nextOffset: number };
@@ -47,6 +48,8 @@ function TasksPageContent() {
     progress: 0,
     checklistText: "",
   });
+  const [assignPickerQuery, setAssignPickerQuery] = useState("");
+  const [assignPickerRole, setAssignPickerRole] = useState<MemberRoleFilter>("ALL");
 
   const fieldStyle = {
     borderColor: "var(--border)",
@@ -56,6 +59,23 @@ function TasksPageContent() {
 
   const initialIssueTaskId = searchParams.get("taskId");
   const initialIssueId = searchParams.get("issueId");
+  const taskAssignableRoles = useMemo(
+    () => (user ? getTaskAssignableRoles(user.role) : []),
+    [user]
+  );
+  const assignPickerRoleOptions = useMemo(() => {
+    const pool = team.filter((member) => taskAssignableRoles.includes(member.role));
+    return sortedUniqueRoles(pool);
+  }, [team, taskAssignableRoles]);
+  const filteredAssignPicker = useMemo(
+    () =>
+      filterMembersForPicker(team, {
+        searchQuery: assignPickerQuery,
+        roleFilter: assignPickerRole,
+        restrictToRoles: taskAssignableRoles,
+      }),
+    [team, assignPickerQuery, assignPickerRole, taskAssignableRoles]
+  );
   const taskAnalytics = useMemo(() => {
     const total = tasks.length;
     const done = tasks.filter((task) => task.status === "DONE").length;
@@ -227,28 +247,50 @@ function TasksPageContent() {
                 />
 
                 <div>
-                  <p className="text-sm font-medium text-[var(--text-main)]">Assign to team members</p>
+                  <div className="flex flex-wrap items-end justify-between gap-2">
+                    <p className="text-sm font-medium text-[var(--text-main)]">Assign to team members</p>
+                    <span className="text-xs text-[var(--text-soft)]">
+                      {filteredAssignPicker.length === team.filter((m) => taskAssignableRoles.includes(m.role)).length
+                        ? `${filteredAssignPicker.length} people`
+                        : `${filteredAssignPicker.length} shown`}
+                    </span>
+                  </div>
+                  <div className="mt-3">
+                    <MemberPickerToolbar
+                      searchQuery={assignPickerQuery}
+                      onSearchChange={setAssignPickerQuery}
+                      roleFilter={assignPickerRole}
+                      onRoleFilterChange={setAssignPickerRole}
+                      roleOptions={assignPickerRoleOptions}
+                    />
+                  </div>
                   <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                    {team.map((member) => (
-                      <label
-                        key={member.id}
-                        className="flex items-center gap-3 rounded-2xl border px-4 py-3 text-sm"
-                        style={{
-                          borderColor: "var(--border)",
-                          background: "var(--surface-soft)",
-                          color: "var(--text-main)",
-                        }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={form.userIds.includes(member.id)}
-                          onChange={() => handleAssigneeToggle(member.id)}
-                        />
-                        <span>
-                          {member.name} - {member.role}
-                        </span>
-                      </label>
-                    ))}
+                    {filteredAssignPicker.length === 0 ? (
+                      <p className="col-span-full rounded-2xl border px-4 py-6 text-sm text-[var(--text-soft)]" style={{ borderColor: "var(--border)" }}>
+                        No one matches this search. Clear filters to see assignable people.
+                      </p>
+                    ) : (
+                      filteredAssignPicker.map((member) => (
+                        <label
+                          key={member.id}
+                          className="flex items-center gap-3 rounded-2xl border px-4 py-3 text-sm"
+                          style={{
+                            borderColor: "var(--border)",
+                            background: "var(--surface-soft)",
+                            color: "var(--text-main)",
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={form.userIds.includes(member.id)}
+                            onChange={() => handleAssigneeToggle(member.id)}
+                          />
+                          <span>
+                            {member.name} - {member.role}
+                          </span>
+                        </label>
+                      ))
+                    )}
                   </div>
                 </div>
 
