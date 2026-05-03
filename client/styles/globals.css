@@ -118,3 +118,80 @@ textarea {
   color: white;
   box-shadow: 0 12px 24px color-mix(in srgb, var(--accent) 24%, transparent);
 }
+
+/* Public marketing landing (app/page) — motion + spotlight */
+@keyframes landing-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes landing-blob {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(8%, -6%) scale(1.06);
+  }
+  66% {
+    transform: translate(-6%, 5%) scale(0.96);
+  }
+}
+
+@keyframes landing-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.landing-in-up {
+  animation: landing-in-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.landing-blob {
+  animation: landing-blob 22s ease-in-out infinite;
+}
+
+.landing-blob-delayed {
+  animation: landing-blob 28s ease-in-out infinite;
+  animation-delay: -8s;
+}
+
+.landing-shimmer-border {
+  background: linear-gradient(
+    110deg,
+    transparent 0%,
+    color-mix(in srgb, var(--accent) 35%, transparent) 45%,
+    color-mix(in srgb, var(--accent-alt) 40%, transparent) 55%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: landing-shimmer 6s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-in-up,
+  .landing-blob,
+  .landing-blob-delayed,
+  .landing-shimmer-border {
+    animation: none !important;
+  }
+
+  .landing-in-up {
+    opacity: 1;
+    transform: none;
+  }
+
+  .landing-page .animate-ping {
+    animation: none !important;
+  }
+}
