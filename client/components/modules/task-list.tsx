@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiDelete, apiPost, apiPut } from "@/lib/api";
+import { getTaskAssignableRoles } from "@/lib/dashboard";
 import type { CRMUser, Task } from "@/types/crm";
 
 type TaskListProps = {
@@ -87,6 +88,7 @@ export function TaskList({
   const canRespondToIssues =
     user.role === "SUPERADMIN" || user.role === "ADMIN" || user.role === "MANAGER";
   const canEditTask = canRespondToIssues;
+  const assignableRoles = getTaskAssignableRoles(user.role);
 
   const openEditTask = (task: Task) => {
     setEditingTaskId(task.id);
@@ -437,7 +439,7 @@ export function TaskList({
               {team.length ? (
                 <div className="grid gap-2 sm:grid-cols-2">
                   {team
-                    .filter((member) => ["EMPLOYEE", "INTERN"].includes(member.role))
+                    .filter((member) => assignableRoles.includes(member.role))
                     .map((member) => (
                       <label
                         key={member.id}

@@ -7,6 +7,7 @@ import { renderSessionGate } from "@/components/shared/session-gate";
 import { useRealtimeRefresh } from "@/hooks/use-realtime-refresh";
 import { useSession } from "@/hooks/use-session";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api";
+import { getTaskAssignableRoles } from "@/lib/dashboard";
 import type { CRMUser, Department, Project, Task } from "@/types/crm";
 type PaginatedResponse<T> = { items: T[]; total: number; hasMore: boolean; nextOffset: number };
 
@@ -73,6 +74,11 @@ export default function ProjectsPage() {
     background: "var(--surface-soft)",
     color: "var(--text-main)",
   } as const;
+
+  const assignableRoles = useMemo(
+    () => (user ? getTaskAssignableRoles(user.role) : []),
+    [user]
+  );
 
   const loadProjects = async (append = false) => {
     const offset = append ? nextProjectOffset : 0;
@@ -578,10 +584,14 @@ export default function ProjectsPage() {
                 </div>
 
                 <div>
-                  <p className="text-sm font-medium text-[var(--text-main)]">Assign to employees or interns</p>
+                  <p className="text-sm font-medium text-[var(--text-main)]">
+                    {user?.role === "SUPERADMIN"
+                      ? "Assign to team (including admins and managers)"
+                      : "Assign to employees or interns"}
+                  </p>
                   <div className="mt-3 grid max-h-72 gap-3 overflow-auto sm:grid-cols-2">
                     {team
-                      .filter((member) => ["EMPLOYEE", "INTERN"].includes(member.role))
+                      .filter((member) => assignableRoles.includes(member.role))
                       .map((member) => (
                         <label
                           key={member.id}
@@ -720,7 +730,7 @@ export default function ProjectsPage() {
                             />
                             <div className="grid gap-2 sm:grid-cols-2">
                               {team
-                                .filter((member) => ["EMPLOYEE", "INTERN"].includes(member.role))
+                                .filter((member) => assignableRoles.includes(member.role))
                                 .map((member) => (
                                   <label
                                     key={member.id}
