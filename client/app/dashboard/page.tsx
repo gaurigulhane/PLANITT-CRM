@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { CRMShell } from "@/components/layout/crm-shell";
 import { useCrmSearch } from "@/components/providers/crm-search-provider";
 import {
@@ -57,6 +57,37 @@ function Surface({
 
 function formatRole(role: CRMUser["role"]) {
   return role.charAt(0) + role.slice(1).toLowerCase();
+}
+
+function rosterRolePillStyle(role: CRMUser["role"]): CSSProperties {
+  switch (role) {
+    case "SUPERADMIN":
+    case "ADMIN":
+      return {
+        background: "color-mix(in srgb, var(--accent) 20%, var(--surface))",
+        color: "var(--accent-strong)",
+        borderColor: "color-mix(in srgb, var(--accent) 40%, var(--border))",
+      };
+    case "MANAGER":
+      return {
+        background: "color-mix(in srgb, var(--success) 18%, var(--surface))",
+        color: "color-mix(in srgb, var(--success) 85%, var(--text-main))",
+        borderColor: "color-mix(in srgb, var(--success) 35%, var(--border))",
+      };
+    case "EMPLOYEE":
+      return {
+        background: "color-mix(in srgb, var(--accent) 8%, var(--surface-soft))",
+        color: "var(--text-main)",
+        borderColor: "var(--border)",
+      };
+    case "INTERN":
+    default:
+      return {
+        background: "var(--surface-soft)",
+        color: "var(--text-soft)",
+        borderColor: "var(--border)",
+      };
+  }
 }
 
 function canUseGoogleWorkspace(scope: DashboardSummary["scope"]) {
@@ -782,43 +813,61 @@ function TeamMemberCard({
   active: boolean;
   onClick: () => void;
 }) {
+  const dept = member.department?.name || "Unassigned";
+  const mgr = member.manager?.name || "—";
+  const designation = member.designation?.trim() || "Team member";
+
   return (
     <button
       type="button"
       onClick={onClick}
-      className="w-full rounded-[22px] border p-4 text-left transition"
+      className="group w-full rounded-2xl border px-3 py-2.5 text-left transition hover:opacity-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
       style={{
-        borderColor: active ? "color-mix(in srgb, var(--accent) 60%, var(--border))" : "var(--border)",
+        borderColor: active ? "color-mix(in srgb, var(--accent) 55%, var(--border))" : "var(--border)",
+        borderLeftWidth: 3,
+        borderLeftStyle: "solid",
+        borderLeftColor: active ? "var(--accent-strong)" : "transparent",
         background: active
-          ? "linear-gradient(180deg, color-mix(in srgb, var(--accent) 10%, var(--surface)), var(--surface))"
-          : "var(--surface-soft)",
-        boxShadow: active ? "0 16px 34px rgba(37, 99, 235, 0.12)" : "none",
+          ? "linear-gradient(90deg, color-mix(in srgb, var(--accent) 12%, var(--surface)) 0%, var(--surface-soft) 48%)"
+          : "var(--surface)",
+        boxShadow: active ? "0 8px 24px rgba(37, 99, 235, 0.08)" : "0 1px 0 color-mix(in srgb, var(--border) 40%, transparent)",
       }}
     >
-      <div className="flex items-start gap-3">
+      <div className="flex items-center gap-3">
         <div
-          className="flex h-12 w-12 items-center justify-center rounded-2xl text-sm font-semibold"
-          style={{ background: "color-mix(in srgb, var(--accent) 14%, var(--surface))", color: "var(--accent-strong)" }}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-xs font-bold tracking-tight"
+          style={{
+            background: active
+              ? "color-mix(in srgb, var(--accent) 22%, var(--surface))"
+              : "color-mix(in srgb, var(--accent) 12%, var(--surface-soft))",
+            color: "var(--accent-strong)",
+          }}
         >
           {getInitials(member.name)}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-[var(--text-main)]">{member.name}</p>
-              <p className="truncate text-xs text-[var(--text-soft)]">{member.designation || "Team member"}</p>
+              <p className="truncate text-sm font-semibold leading-tight text-[var(--text-main)]">{member.name}</p>
+              <p className="mt-0.5 truncate text-[11px] leading-snug text-[var(--text-soft)]">{designation}</p>
             </div>
             <span
-              className="rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em]"
-              style={{ background: "var(--surface)", color: "var(--text-soft)" }}
+              className="shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em]"
+              style={rosterRolePillStyle(member.role)}
             >
               {formatRole(member.role)}
             </span>
           </div>
-          <div className="mt-3 grid gap-2 text-xs text-[var(--text-soft)] sm:grid-cols-2">
-            <p>Department: {member.department?.name || "Unassigned"}</p>
-            <p>Manager: {member.manager?.name || "-"}</p>
-          </div>
+          <p
+            className="mt-1.5 truncate text-[11px] leading-relaxed text-[var(--text-faint)]"
+            title={`${dept} · ${mgr}`}
+          >
+            <span className="font-medium text-[var(--text-soft)]">Dept</span> {dept}
+            <span className="mx-1.5 text-[var(--border)]" aria-hidden>
+              ·
+            </span>
+            <span className="font-medium text-[var(--text-soft)]">Mgr</span> {mgr}
+          </p>
         </div>
       </div>
     </button>
@@ -849,46 +898,85 @@ function TeamAnalyticsPanel({
   onSelect: (memberId: string) => void;
 }) {
   return (
-    <div className="grid items-start gap-4 2xl:grid-cols-[0.9fr_1.1fr]">
-      <Surface className="h-fit w-full min-w-0 self-start p-5">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-faint)]">
-              {directorySubtitle}
-            </p>
-            <h2 className="mt-2 text-xl font-semibold text-[var(--text-main)]">{directoryTitle}</h2>
-          </div>
-          <span className="text-sm tabular-nums text-[var(--text-soft)]">
-            Showing {members.length} of {totalInDirectory}
-          </span>
-        </div>
+    <div className="grid items-start gap-4 2xl:grid-cols-[minmax(300px,0.95fr)_1.05fr]">
+      <Surface className="h-fit w-full min-w-0 self-start overflow-hidden p-0">
         <div
-          className="mt-5 max-h-[min(52vh,560px)] min-h-0 overflow-y-auto overscroll-contain pr-1"
-          style={{ scrollbarGutter: "stable" }}
+          className="border-b px-5 py-4"
+          style={{
+            borderColor: "var(--border)",
+            background:
+              "linear-gradient(135deg, color-mix(in srgb, var(--accent) 10%, var(--surface)) 0%, var(--surface) 55%)",
+          }}
         >
-          <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-1">
-            {members.map((member) => (
-              <TeamMemberCard
-                key={member.id}
-                member={member}
-                active={member.id === selectedMemberId}
-                onClick={() => onSelect(member.id)}
-              />
-            ))}
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--text-faint)]">
+                {directorySubtitle}
+              </p>
+              <h2 className="mt-1.5 text-lg font-semibold tracking-tight text-[var(--text-main)] sm:text-xl">
+                {directoryTitle}
+              </h2>
+              <p className="mt-1 max-w-md text-xs leading-relaxed text-[var(--text-soft)]">
+                Tap a row to open analytics. Search and role filters apply to the full directory.
+              </p>
+            </div>
+            <span
+              className="shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold tabular-nums"
+              style={{
+                borderColor: "var(--border)",
+                background: "var(--surface-soft)",
+                color: "var(--text-main)",
+              }}
+            >
+              {members.length} / {totalInDirectory}
+            </span>
           </div>
         </div>
-        {canLoadMore && onLoadMore ? (
-          <div className="mt-4 flex justify-center border-t pt-4" style={{ borderColor: "var(--border)" }}>
-            <button
-              type="button"
-              onClick={() => onLoadMore()}
-              className="w-full max-w-md rounded-xl px-4 py-3 text-sm font-semibold text-white shadow-sm transition sm:w-auto"
-              style={{ background: "var(--accent-strong)" }}
+
+        <div className="p-3 sm:p-4">
+          <div
+            className="rounded-2xl border p-2 sm:p-2.5"
+            style={{
+              borderColor: "var(--border)",
+              background: "color-mix(in srgb, var(--surface-soft) 65%, var(--surface))",
+            }}
+          >
+            <div
+              className="max-h-[min(52vh,520px)] min-h-0 space-y-2 overflow-y-auto overscroll-contain pr-0.5"
+              style={{ scrollbarGutter: "stable" }}
             >
-              Load more ({Math.max(0, totalInDirectory - members.length)} remaining)
-            </button>
+              {members.map((member) => (
+                <TeamMemberCard
+                  key={member.id}
+                  member={member}
+                  active={member.id === selectedMemberId}
+                  onClick={() => onSelect(member.id)}
+                />
+              ))}
+            </div>
           </div>
-        ) : null}
+
+          {canLoadMore && onLoadMore ? (
+            <div className="mt-3 flex justify-center sm:mt-4">
+              <button
+                type="button"
+                onClick={() => onLoadMore()}
+                className="w-full rounded-xl border px-4 py-2.5 text-sm font-semibold transition hover:opacity-95 sm:max-w-sm"
+                style={{
+                  borderColor: "var(--border)",
+                  background: "var(--surface-soft)",
+                  color: "var(--text-main)",
+                  boxShadow: "0 1px 0 color-mix(in srgb, var(--border) 50%, transparent)",
+                }}
+              >
+                Load more
+                <span className="ml-1.5 tabular-nums text-[var(--text-soft)]">
+                  ({Math.max(0, totalInDirectory - members.length)} left)
+                </span>
+              </button>
+            </div>
+          ) : null}
+        </div>
       </Surface>
 
       <div className="space-y-4">
