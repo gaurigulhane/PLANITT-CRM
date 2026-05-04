@@ -821,16 +821,17 @@ function TeamMemberCard({
     <button
       type="button"
       onClick={onClick}
-      className="group w-full rounded-2xl border px-3 py-2.5 text-left transition hover:opacity-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
+      className="group w-full rounded-2xl border px-3 py-2.5 text-left transition hover:opacity-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-strong)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
       style={{
-        borderColor: active ? "color-mix(in srgb, var(--accent) 55%, var(--border))" : "var(--border)",
-        borderLeftWidth: 3,
-        borderLeftStyle: "solid",
-        borderLeftColor: active ? "var(--accent-strong)" : "transparent",
+        borderWidth: active ? 2 : 1,
+        borderStyle: "solid",
+        borderColor: active ? "var(--accent-strong)" : "var(--border)",
         background: active
-          ? "linear-gradient(90deg, color-mix(in srgb, var(--accent) 12%, var(--surface)) 0%, var(--surface-soft) 48%)"
+          ? "linear-gradient(180deg, color-mix(in srgb, var(--accent) 14%, var(--surface)) 0%, var(--surface) 100%)"
           : "var(--surface)",
-        boxShadow: active ? "0 8px 24px rgba(37, 99, 235, 0.08)" : "0 1px 0 color-mix(in srgb, var(--border) 40%, transparent)",
+        boxShadow: active
+          ? "0 0 0 1px color-mix(in srgb, var(--accent-strong) 25%, transparent), 0 12px 28px rgba(37, 99, 235, 0.12)"
+          : "0 1px 0 color-mix(in srgb, var(--border) 40%, transparent)",
       }}
     >
       <div className="flex items-center gap-3">
@@ -898,7 +899,7 @@ function TeamAnalyticsPanel({
   onSelect: (memberId: string) => void;
 }) {
   return (
-    <div className="grid items-start gap-4 2xl:grid-cols-[minmax(300px,0.95fr)_1.05fr]">
+    <div className="grid items-start gap-4 lg:grid-cols-[minmax(280px,0.42fr)_1fr] xl:grid-cols-[minmax(300px,0.4fr)_1fr]">
       <Surface className="h-fit w-full min-w-0 self-start overflow-hidden p-0">
         <div
           className="border-b px-5 py-4"
@@ -957,20 +958,20 @@ function TeamAnalyticsPanel({
           </div>
 
           {canLoadMore && onLoadMore ? (
-            <div className="mt-3 flex justify-center sm:mt-4">
+            <div className="mt-3 sm:mt-4">
               <button
                 type="button"
                 onClick={() => onLoadMore()}
-                className="w-full rounded-xl border px-4 py-2.5 text-sm font-semibold transition hover:opacity-95 sm:max-w-sm"
+                className="w-full rounded-full border px-5 py-3 text-sm font-semibold transition hover:opacity-95"
                 style={{
                   borderColor: "var(--border)",
                   background: "var(--surface-soft)",
                   color: "var(--text-main)",
-                  boxShadow: "0 1px 0 color-mix(in srgb, var(--border) 50%, transparent)",
+                  boxShadow: "0 1px 0 color-mix(in srgb, var(--border) 45%, transparent)",
                 }}
               >
                 Load more
-                <span className="ml-1.5 tabular-nums text-[var(--text-soft)]">
+                <span className="ml-1.5 tabular-nums font-medium text-[var(--text-soft)]">
                   ({Math.max(0, totalInDirectory - members.length)} left)
                 </span>
               </button>
@@ -979,7 +980,7 @@ function TeamAnalyticsPanel({
         </div>
       </Surface>
 
-      <div className="space-y-4">
+      <div className="min-w-0 space-y-4">
         {analyticsLoading || !selectedAnalytics ? (
           <StatePanel
             title="Loading team analytics"
