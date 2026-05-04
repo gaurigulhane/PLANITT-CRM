@@ -849,8 +849,8 @@ function TeamAnalyticsPanel({
   onSelect: (memberId: string) => void;
 }) {
   return (
-    <div className="grid gap-4 2xl:grid-cols-[0.9fr_1.1fr]">
-      <Surface className="p-5">
+    <div className="grid items-start gap-4 2xl:grid-cols-[0.9fr_1.1fr]">
+      <Surface className="h-fit w-full min-w-0 self-start p-5">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-faint)]">
@@ -863,7 +863,7 @@ function TeamAnalyticsPanel({
           </span>
         </div>
         <div
-          className="mt-5 max-h-[min(52vh,560px)] overflow-y-auto pr-1"
+          className="mt-5 max-h-[min(52vh,560px)] min-h-0 overflow-y-auto overscroll-contain pr-1"
           style={{ scrollbarGutter: "stable" }}
         >
           <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-1">

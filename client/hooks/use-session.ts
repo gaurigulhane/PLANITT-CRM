@@ -51,6 +51,9 @@ export function useSession(options: UseSessionOptions = {}) {
             ? Number((err as { status?: number }).status)
             : undefined;
         const isNetworkFailure = status === 0;
+        /** Only these mean the session cookie / token is no longer valid; everything else is transient or server-side. */
+        const shouldInvalidateSession =
+          status === 401 || status === 403 || status === 404;
 
         if (isNetworkFailure) {
           if (isMounted) {
@@ -62,11 +65,20 @@ export function useSession(options: UseSessionOptions = {}) {
               )
             );
           }
-        } else {
+        } else if (shouldInvalidateSession) {
           clearToken();
           if (isMounted) {
             router.replace(redirectTo);
           }
+        } else if (isMounted) {
+          setUser(null);
+          const fallback =
+            status === 429
+              ? "Too many requests. Please wait a moment, then use Try again."
+              : status != null && status >= 500
+                ? "The server had a problem loading your session. Try again in a moment."
+                : "The server could not verify your session right now. Try again in a moment.";
+          setError(normalizeErrorMessage(err, fallback));
         }
       } finally {
         if (isMounted) {

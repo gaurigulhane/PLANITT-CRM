@@ -40,7 +40,11 @@ app.use(
     credentials: true,
   })
 );
+/** Session checks hit this route very often; do not count them toward login brute-force limits. */
 app.use((req, res, next) => {
+  if (req.path === "/api/auth/me") {
+    return next();
+  }
   if (req.path.startsWith("/api/auth")) {
     return authLimiter(req, res, next);
   }
