@@ -7,7 +7,8 @@ import { StatePanel } from "@/components/shared/state-panel";
 import { renderSessionGate } from "@/components/shared/session-gate";
 import { useRealtimeRefresh } from "@/hooks/use-realtime-refresh";
 import { useSession } from "@/hooks/use-session";
-import { MemberPickerToolbar, filterMembersForPicker, sortedUniqueRoles, type MemberRoleFilter } from "@/components/shared/member-picker-toolbar";
+import { MemberPickerToolbar, type MemberRoleFilter } from "@/components/shared/member-picker-toolbar";
+import { usePaginatedDirectoryUsers } from "@/hooks/use-paginated-directory-users";
 import { apiGet, apiPost } from "@/lib/api";
 import { getTaskAssignableRoles, isAdminRole } from "@/lib/dashboard";
 import { useSearchParams } from "next/navigation";
@@ -15,10 +16,10 @@ import { TASK_PRIORITY_OPTIONS } from "@/lib/task-groups";
 import type { CRMUser, Task, TaskPriority } from "@/types/crm";
 type PaginatedResponse<T> = { items: T[]; total: number; hasMore: boolean; nextOffset: number };
 
-function Surface({ children }: { children: ReactNode }) {
+function Surface({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
     <section
-      className="rounded-[20px] border p-5"
+      className={`rounded-[20px] border p-5 ${className}`.trim()}
       style={{
         background: "var(--surface)",
         borderColor: "var(--border)",
@@ -34,7 +35,7 @@ function TasksPageContent() {
   const searchParams = useSearchParams();
   const { user, loading: sessionLoading, error: sessionError, retry: retrySession } = useSession();
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [team, setTeam] = useState<CRMUser[]>([]);
+  const [tasksTotal, setTasksTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMoreTasks, setHasMoreTasks] = useState(false);
@@ -65,19 +66,39 @@ function TasksPageContent() {
     () => (user ? getTaskAssignableRoles(user.role) : []),
     [user]
   );
-  const assignPickerRoleOptions = useMemo(() => {
-    const pool = team.filter((member) => taskAssignableRoles.includes(member.role));
-    return sortedUniqueRoles(pool);
-  }, [team, taskAssignableRoles]);
-  const filteredAssignPicker = useMemo(
-    () =>
-      filterMembersForPicker(team, {
-        searchQuery: assignPickerQuery,
-        roleFilter: assignPickerRole,
-        restrictToRoles: taskAssignableRoles,
-      }),
-    [team, assignPickerQuery, assignPickerRole, taskAssignableRoles]
+  const assignPickerRoleOptions = useMemo(
+    () => [...taskAssignableRoles].sort((a, b) => a.localeCompare(b)),
+    [taskAssignableRoles]
   );
+
+  const directory = usePaginatedDirectoryUsers({
+    limit: 16,
+    roleFilter: assignPickerRole,
+    searchQuery: assignPickerQuery,
+    enabled: Boolean(user && isAdminRole(user.role)),
+  });
+  const teamForTaskList = useMemo(() => {
+    const byId = new Map(directory.items.map((u) => [u.id, u]));
+    for (const task of tasks) {
+      for (const a of task.assignments) {
+        if (!byId.has(a.userId)) {
+          byId.set(a.userId, {
+            id: a.user.id,
+            name: a.user.name,
+            email: "—",
+            role: a.user.role,
+            designation: null,
+            departmentId: null,
+            department: null,
+            managerId: null,
+            manager: null,
+          });
+        }
+      }
+    }
+    return [...byId.values()];
+  }, [directory.items, tasks]);
+
   const taskAnalytics = useMemo(() => {
     const total = tasks.length;
     const done = tasks.filter((task) => task.status === "DONE").length;
@@ -94,6 +115,7 @@ function TasksPageContent() {
     const offset = append ? nextTaskOffset : 0;
     const data = await apiGet<PaginatedResponse<Task>>(`/tasks?paginate=true&limit=30&offset=${offset}`);
     setTasks((current) => (append ? [...current, ...data.items] : data.items));
+    setTasksTotal(data.total);
     setHasMoreTasks(data.hasMore);
     setNextTaskOffset(data.nextOffset);
   };
@@ -103,11 +125,6 @@ function TasksPageContent() {
       try {
         setError("");
         await loadTasks(false);
-
-        if (user && isAdminRole(user.role)) {
-          const users = await apiGet<CRMUser[]>("/users");
-          setTeam(users);
-        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load tasks");
       } finally {
@@ -123,10 +140,6 @@ function TasksPageContent() {
   useRealtimeRefresh(user, ["task:updated", "issue:updated", "org:updated"], async () => {
     await loadTasks(false);
 
-    if (user && isAdminRole(user.role)) {
-      const users = await apiGet<CRMUser[]>("/users");
-      setTeam(users);
-    }
   });
 
   const handleAssigneeToggle = (userId: string) => {
@@ -214,9 +227,9 @@ function TasksPageContent() {
           </div>
         </Surface>
 
-        <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
+        <div className="grid gap-4 lg:grid-cols-1 xl:grid-cols-[minmax(280px,380px)_1fr] xl:items-start">
           {isAdminRole(user.role) ? (
-            <Surface>
+            <Surface className="xl:sticky xl:top-20 xl:max-h-[calc(100vh-6rem)] xl:overflow-y-auto">
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-faint)]">
                 Create task
               </p>
@@ -273,11 +286,19 @@ function TasksPageContent() {
                   <div className="flex flex-wrap items-end justify-between gap-2">
                     <p className="text-sm font-medium text-[var(--text-main)]">Assign to team members</p>
                     <span className="text-xs text-[var(--text-soft)]">
-                      {filteredAssignPicker.length === team.filter((m) => taskAssignableRoles.includes(m.role)).length
-                        ? `${filteredAssignPicker.length} people`
-                        : `${filteredAssignPicker.length} shown`}
+                      {directory.loading
+                        ? "Searching…"
+                        : `Showing ${directory.items.length} of ${directory.total}`}
                     </span>
                   </div>
+                  {form.userIds.length ? (
+                    <p className="mt-2 text-xs text-[var(--text-soft)]">
+                      Selected:{" "}
+                      {form.userIds
+                        .map((id) => teamForTaskList.find((m) => m.id === id)?.name ?? id.slice(0, 8))
+                        .join(", ")}
+                    </p>
+                  ) : null}
                   <div className="mt-3">
                     <MemberPickerToolbar
                       searchQuery={assignPickerQuery}
@@ -287,34 +308,51 @@ function TasksPageContent() {
                       roleOptions={assignPickerRoleOptions}
                     />
                   </div>
-                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                    {filteredAssignPicker.length === 0 ? (
-                      <p className="col-span-full rounded-2xl border px-4 py-6 text-sm text-[var(--text-soft)]" style={{ borderColor: "var(--border)" }}>
-                        No one matches this search. Clear filters to see assignable people.
-                      </p>
-                    ) : (
-                      filteredAssignPicker.map((member) => (
-                        <label
-                          key={member.id}
-                          className="flex items-center gap-3 rounded-2xl border px-4 py-3 text-sm"
-                          style={{
-                            borderColor: "var(--border)",
-                            background: "var(--surface-soft)",
-                            color: "var(--text-main)",
-                          }}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={form.userIds.includes(member.id)}
-                            onChange={() => handleAssigneeToggle(member.id)}
-                          />
-                          <span>
-                            {member.name} - {member.role}
-                          </span>
-                        </label>
-                      ))
-                    )}
+                  <div className="mt-3 max-h-[min(280px,40vh)] overflow-y-auto rounded-2xl border p-2" style={{ borderColor: "var(--border)" }}>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {directory.loading && !directory.items.length ? (
+                        <p className="col-span-full px-3 py-6 text-sm text-[var(--text-soft)]">Loading directory…</p>
+                      ) : directory.items.length === 0 ? (
+                        <p className="col-span-full px-3 py-6 text-sm text-[var(--text-soft)]">
+                          No one matches this search. Try another name or clear filters.
+                        </p>
+                      ) : (
+                        directory.items.map((member) => (
+                          <label
+                            key={member.id}
+                            className="flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm"
+                            style={{
+                              borderColor: "var(--border)",
+                              background: "var(--surface-soft)",
+                              color: "var(--text-main)",
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={form.userIds.includes(member.id)}
+                              onChange={() => handleAssigneeToggle(member.id)}
+                            />
+                            <span className="min-w-0 truncate">
+                              {member.name} · {member.role}
+                            </span>
+                          </label>
+                        ))
+                      )}
+                    </div>
                   </div>
+                  {directory.hasMore ? (
+                    <div className="mt-3 flex justify-center">
+                      <button
+                        type="button"
+                        disabled={directory.loadingMore}
+                        onClick={() => void directory.loadMore()}
+                        className="rounded-xl border px-4 py-2 text-xs font-semibold disabled:opacity-60"
+                        style={{ borderColor: "var(--border)", color: "var(--text-main)" }}
+                      >
+                        {directory.loadingMore ? "Loading…" : "Load more people"}
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
 
                 <div>
@@ -365,26 +403,28 @@ function TasksPageContent() {
           )}
 
           <Surface>
-            <div className="flex items-end justify-between gap-4">
+            <div className="flex flex-wrap items-end justify-between gap-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-faint)]">
                   Open list
                 </p>
                 <h2 className="mt-2 text-xl font-semibold text-[var(--text-main)]">Current tasks</h2>
               </div>
-              <span className="text-sm text-[var(--text-soft)]">{tasks.length} items</span>
+              <span className="text-sm tabular-nums text-[var(--text-soft)]">
+                {tasksTotal ? `Showing ${tasks.length} of ${tasksTotal}` : `${tasks.length} loaded`}
+              </span>
             </div>
 
             {loading ? <p className="mt-6 text-sm text-[var(--text-soft)]">Loading tasks...</p> : null}
             {!loading && error ? <p className="mt-6 text-sm font-medium text-rose-600">{error}</p> : null}
 
-            <div className="mt-6">
+            <div className="mt-6 max-h-[min(70vh,900px)] overflow-y-auto pr-1">
               {tasks.length ? (
                 <TaskList
                   tasks={tasks}
                   user={user}
-                  team={team}
-                  onUpdated={loadTasks}
+                  team={teamForTaskList}
+                  onUpdated={() => void loadTasks(false)}
                   initialIssueTaskId={initialIssueTaskId}
                   initialIssueId={initialIssueId}
                 />
@@ -401,7 +441,7 @@ function TasksPageContent() {
                 </div>
               )}
               {hasMoreTasks ? (
-                <div className="mt-4 flex justify-center">
+                <div className="sticky bottom-0 mt-4 flex justify-center border-t pt-3" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
                   <button
                     type="button"
                     disabled={loadingMore}
@@ -409,10 +449,12 @@ function TasksPageContent() {
                       setLoadingMore(true);
                       void loadTasks(true).finally(() => setLoadingMore(false));
                     }}
-                    className="rounded-xl border px-4 py-2 text-sm font-semibold disabled:opacity-60"
-                    style={{ borderColor: "var(--border)", color: "var(--text-main)" }}
+                    className="w-full max-w-md rounded-xl px-4 py-3 text-sm font-semibold text-white shadow-sm transition disabled:opacity-60 sm:w-auto"
+                    style={{ background: "var(--accent-strong)" }}
                   >
-                    {loadingMore ? "Loading..." : "Load more tasks"}
+                    {loadingMore
+                      ? "Loading…"
+                      : `Load more tasks (${Math.max(0, tasksTotal - tasks.length)} remaining)`}
                   </button>
                 </div>
               ) : null}

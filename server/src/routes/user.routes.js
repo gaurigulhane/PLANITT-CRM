@@ -6,6 +6,7 @@ import {
   deleteUser,
   getMyProfile,
   getUserAnalytics,
+  getUserDirectoryStats,
   getUsers,
   updateMyProfile,
   updateUserProfileByLeadership,
@@ -23,6 +24,12 @@ const upload = multer({
 
 router.get("/me", authMiddleware, getMyProfile);
 router.put("/me/profile", authMiddleware, updateMyProfile);
+router.get(
+  "/directory-stats",
+  authMiddleware,
+  authorizeRoles("SUPERADMIN", "ADMIN", "MANAGER"),
+  getUserDirectoryStats
+);
 router.get("/", authMiddleware, authorizeRoles("SUPERADMIN", "ADMIN", "MANAGER"), getUsers);
 router.post(
   "/bulk-upload",

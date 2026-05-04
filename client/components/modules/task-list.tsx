@@ -285,10 +285,14 @@ export function TaskList({
             </p>
           </div>
           <div className="space-y-3">
-            {group.tasks.map((task) => (
+            {group.tasks.map((task) => {
+              const showAssigneeChips = !group.key.startsWith("user:");
+              const showInlineStatusSelect = canManageTask(task) && !task.checklistItems.length;
+              const showPrioritySelect = canManageTask(task);
+              return (
               <article
                 key={task.id}
-                className="rounded-lg border p-4"
+                className="rounded-lg border p-3 sm:p-4"
                 style={{
                   background: "var(--surface-soft)",
                   borderColor: "var(--border)",
@@ -298,18 +302,25 @@ export function TaskList({
                 <div className="space-y-3">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="truncate text-base font-semibold text-[var(--text-main)]">{task.title}</h3>
-                        <span
-                          className={`rounded-md px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${priorityBadgeClass[task.priority ?? "MEDIUM"]}`}
-                        >
-                          {TASK_PRIORITY_OPTIONS.find((o) => o.value === (task.priority ?? "MEDIUM"))?.label ??
-                            "Medium"}
-                        </span>
-                        <span className={`rounded-md px-2.5 py-1 text-[11px] font-bold ${statusStyles[task.status]}`}>
-                          {task.status.replace("_", " ")}
-                        </span>
-                        {canManageTask(task) ? (
+                      <div className="flex flex-wrap items-start gap-x-2 gap-y-2">
+                        <h3 className="line-clamp-2 min-w-0 flex-1 text-base font-semibold leading-snug text-[var(--text-main)]">
+                          {task.title}
+                        </h3>
+                        <div className="flex shrink-0 flex-wrap items-center gap-2">
+                        {!showPrioritySelect ? (
+                          <span
+                            className={`rounded-md px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${priorityBadgeClass[task.priority ?? "MEDIUM"]}`}
+                          >
+                            {TASK_PRIORITY_OPTIONS.find((o) => o.value === (task.priority ?? "MEDIUM"))?.label ??
+                              "Medium"}
+                          </span>
+                        ) : null}
+                        {!showInlineStatusSelect ? (
+                          <span className={`rounded-md px-2.5 py-1 text-[11px] font-bold ${statusStyles[task.status]}`}>
+                            {task.status.replace("_", " ")}
+                          </span>
+                        ) : null}
+                        {showPrioritySelect ? (
                           <select
                             value={task.priority ?? "MEDIUM"}
                             disabled={savingId === task.id}
@@ -333,7 +344,7 @@ export function TaskList({
                             ))}
                           </select>
                         ) : null}
-                        {canManageTask(task) && !task.checklistItems.length ? (
+                        {showInlineStatusSelect ? (
                           <select
                             value={task.status}
                             disabled={savingId === task.id}
@@ -356,8 +367,9 @@ export function TaskList({
                             ))}
                           </select>
                         ) : null}
+                        </div>
                       </div>
-                <p className="mt-1 text-sm text-[var(--text-soft)]">{task.description || "No description"}</p>
+                <p className="mt-1 text-sm leading-relaxed text-[var(--text-soft)]">{task.description || "No description"}</p>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
@@ -446,6 +458,7 @@ export function TaskList({
               ) : null}
             </div>
 
+            {showAssigneeChips ? (
             <div className="flex flex-wrap items-center gap-2">
               {task.assignments.slice(0, 3).map((assignment) => (
                 <span
@@ -464,6 +477,7 @@ export function TaskList({
                 <span className="text-xs text-[var(--text-faint)]">+{task.assignments.length - 3} more</span>
               ) : null}
             </div>
+            ) : null}
           </div>
 
           {editingTaskId === task.id ? (
@@ -791,7 +805,8 @@ export function TaskList({
             </div>
           ) : null}
         </article>
-            ))}
+              );
+            })}
           </div>
         </section>
       ))}

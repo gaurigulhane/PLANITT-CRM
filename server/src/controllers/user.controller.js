@@ -323,18 +323,93 @@ function buildAttendanceHeatmap(records, days) {
   });
 }
 
+function buildScopedUserWhere(req) {
+  const isSuperView = req.user.role === "SUPERADMIN" || req.user.role === "ADMIN";
+  if (isSuperView) {
+    return {};
+  }
+  if (req.user.role === "MANAGER") {
+    return {
+      OR: [{ managerId: req.user.userId }, { id: req.user.userId }],
+    };
+  }
+  return {};
+}
+
+function parseRolesFilter(query) {
+  const raw = String(query.roles ?? "").trim();
+  if (!raw) {
+    return null;
+  }
+  const roles = [...new Set(raw.split(",").map((role) => role.trim().toUpperCase()))].filter((role) =>
+    USER_ALLOWED_ROLES.includes(role)
+  );
+  return roles.length ? roles : null;
+}
+
+function parseUserSearchQuery(query) {
+  return String(query.q ?? query.search ?? "").trim();
+}
+
+function andWhereParts(...parts) {
+  const filtered = parts.filter((part) => part && typeof part === "object" && Object.keys(part).length);
+  if (!filtered.length) {
+    return {};
+  }
+  if (filtered.length === 1) {
+    return filtered[0];
+  }
+  return { AND: filtered };
+}
+
+function buildUserListWhere(req, { applySearch = true } = {}) {
+  const scoped = buildScopedUserWhere(req);
+  const roles = parseRolesFilter(req.query);
+  const q = applySearch ? parseUserSearchQuery(req.query) : "";
+
+  const searchClause = q
+    ? {
+        OR: [
+          { name: { contains: q, mode: "insensitive" } },
+          { email: { contains: q, mode: "insensitive" } },
+          { designation: { contains: q, mode: "insensitive" } },
+        ],
+      }
+    : null;
+
+  const roleClause = roles ? { role: { in: roles } } : null;
+
+  return andWhereParts(scoped, searchClause, roleClause);
+}
+
+export async function getUserDirectoryStats(req, res) {
+  try {
+    const where = buildUserListWhere(req, { applySearch: false });
+    const [total, employees, interns, leadership, withDepartment] = await Promise.all([
+      prisma.user.count({ where }),
+      prisma.user.count({ where: andWhereParts(where, { role: "EMPLOYEE" }) }),
+      prisma.user.count({ where: andWhereParts(where, { role: "INTERN" }) }),
+      prisma.user.count({
+        where: andWhereParts(where, { role: { in: ["SUPERADMIN", "ADMIN", "MANAGER"] } } ),
+      }),
+      prisma.user.count({ where: andWhereParts(where, { departmentId: { not: null } }) }),
+    ]);
+    const departmentCoverage = total ? Math.round((withDepartment / total) * 100) : 0;
+    return res.json({
+      total,
+      employees,
+      interns,
+      leadership,
+      departmentCoverage,
+    });
+  } catch (err) {
+    return sendSafeError(res, err, "Unable to fetch directory stats");
+  }
+}
+
 export async function getUsers(_req, res) {
   try {
-    const isSuperView = _req.user.role === "SUPERADMIN" || _req.user.role === "ADMIN";
-    const where =
-      _req.user.role === "MANAGER"
-        ? {
-            OR: [
-              { managerId: _req.user.userId },
-              { id: _req.user.userId },
-            ],
-          }
-        : {};
+    const where = buildUserListWhere(_req, { applySearch: true });
 
     const paginate = String(_req.query.paginate || "").toLowerCase() === "true";
     const limitRaw = Number(_req.query.limit);
@@ -342,10 +417,9 @@ export async function getUsers(_req, res) {
     const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(Math.trunc(limitRaw), 1), 200) : 25;
     const offset = Number.isFinite(offsetRaw) ? Math.max(Math.trunc(offsetRaw), 0) : 0;
 
-    const finalWhere = isSuperView ? {} : where;
     if (!paginate) {
       const users = await prisma.user.findMany({
-        where: finalWhere,
+        where,
         orderBy: { createdAt: "desc" },
         select: toPublicUserSelect(),
       });
@@ -354,13 +428,13 @@ export async function getUsers(_req, res) {
 
     const [items, total] = await Promise.all([
       prisma.user.findMany({
-        where: finalWhere,
+        where,
         orderBy: { createdAt: "desc" },
         skip: offset,
         take: limit,
         select: toPublicUserSelect(),
       }),
-      prisma.user.count({ where: finalWhere }),
+      prisma.user.count({ where }),
     ]);
 
     return res.json({
