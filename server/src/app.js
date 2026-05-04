@@ -13,6 +13,9 @@ const app = express();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+/** Render / Vercel / other reverse proxies set X-Forwarded-*; required for express-rate-limit and accurate req.ip */
+app.set("trust proxy", 1);
+
 const allowedOrigins = getAllowedCorsOrigins();
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
