@@ -891,7 +891,7 @@ function TeamAnalyticsPanel({
   onSelect: (memberId: string) => void;
 }) {
   return (
-    <div className="grid h-[min(74vh,920px)] min-h-[560px] items-stretch gap-4 overflow-hidden lg:grid-cols-[minmax(280px,0.42fr)_1fr] xl:grid-cols-[minmax(300px,0.4fr)_1fr]">
+    <div className="grid min-h-[min(62vh,780px)] items-stretch gap-4 lg:grid-cols-[minmax(280px,0.42fr)_1fr] xl:grid-cols-[minmax(300px,0.4fr)_1fr]">
       <Surface className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden p-0">
         <div
           className="border-b px-5 py-4"
@@ -951,7 +951,7 @@ function TeamAnalyticsPanel({
         </div>
       </Surface>
 
-      <div className="flex min-h-0 min-w-0 flex-col gap-4 overflow-y-auto overscroll-contain pr-1 lg:h-full">
+      <div className="flex min-h-0 min-w-0 flex-col gap-4 lg:h-full">
         {analyticsLoading || !selectedAnalytics ? (
           <div className="flex min-h-0 flex-1 flex-col justify-center">
             <StatePanel
