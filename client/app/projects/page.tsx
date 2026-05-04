@@ -900,17 +900,21 @@ export default function ProjectsPage() {
                           return (
                             <article
                               key={task.id}
-                              className="overflow-hidden rounded-[14px] border p-4"
+                              className="overflow-hidden rounded-2xl border p-3 sm:p-4"
                               style={{ borderColor: "var(--border)", background: "var(--surface-soft)" }}
                             >
-                              <div className="flex flex-col gap-3">
-                                <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                  <div className="min-w-0 flex-1">
-                                    <h4 className="text-lg font-semibold leading-snug text-[var(--text-main)] [overflow-wrap:anywhere]">
-                                      {task.title}
-                                    </h4>
-                                  </div>
-                                  <div className="flex w-full min-w-0 shrink-0 flex-wrap items-center gap-2 sm:w-auto sm:max-w-[min(100%,20rem)] sm:justify-end">
+                              <div className="space-y-3">
+                                <div className="space-y-1">
+                                  <h4 className="line-clamp-2 break-words text-base font-semibold leading-snug text-[var(--text-main)] sm:text-lg">
+                                    {task.title}
+                                  </h4>
+                                  <p className="line-clamp-2 break-words text-sm leading-relaxed text-[var(--text-soft)]">
+                                    {task.description || "No description"}
+                                  </p>
+                                </div>
+
+                                <div className="grid gap-2">
+                                  <div className="flex flex-wrap items-center gap-2">
                                     <button
                                       type="button"
                                       onClick={() => openTaskEditor(task)}
@@ -927,12 +931,15 @@ export default function ProjectsPage() {
                                     >
                                       Delete
                                     </button>
+                                  </div>
+
+                                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                                     <select
                                       value={task.priority ?? "MEDIUM"}
                                       onChange={(event) =>
                                         void updateTaskPriority(task.id, event.target.value as TaskPriority)
                                       }
-                                      className="min-w-0 flex-1 rounded-xl border px-2 py-1.5 text-[11px] font-semibold sm:flex-initial sm:min-w-[7.5rem]"
+                                      className="h-9 rounded-xl border px-3 text-xs font-semibold"
                                       style={{
                                         borderColor: "var(--border)",
                                         background: "var(--surface)",
@@ -951,7 +958,7 @@ export default function ProjectsPage() {
                                       onChange={(event) =>
                                         void updateTaskStatus(task.id, event.target.value as Task["status"])
                                       }
-                                      className="min-w-0 flex-1 rounded-xl border px-3 py-2 text-xs font-semibold sm:flex-initial sm:min-w-[9.5rem]"
+                                      className="h-9 rounded-xl border px-3 text-xs font-semibold"
                                       style={{
                                         borderColor: "var(--border)",
                                         background: "var(--surface)",
@@ -967,9 +974,6 @@ export default function ProjectsPage() {
                                     </select>
                                   </div>
                                 </div>
-                                <p className="text-sm leading-relaxed text-[var(--text-soft)] [overflow-wrap:anywhere]">
-                                  {task.description || "No description"}
-                                </p>
                               </div>
 
                         {editingTaskId === task.id ? (
