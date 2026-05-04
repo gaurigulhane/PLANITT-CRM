@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { CRMShell } from "@/components/layout/crm-shell";
+import { MemberPickerToolbar, filterMembersForPicker, sortedUniqueRoles, type MemberRoleFilter } from "@/components/shared/member-picker-toolbar";
 import { renderSessionGate } from "@/components/shared/session-gate";
 import { useRealtimeRefresh } from "@/hooks/use-realtime-refresh";
 import { useSession } from "@/hooks/use-session";
@@ -92,6 +93,8 @@ export default function EmployeesPage() {
   const [emailDrafts, setEmailDrafts] = useState<Record<string, string>>({});
   const [emailUpdatingId, setEmailUpdatingId] = useState("");
   const [deletingId, setDeletingId] = useState("");
+  const [directorySearchQuery, setDirectorySearchQuery] = useState("");
+  const [directoryRoleFilter, setDirectoryRoleFilter] = useState<MemberRoleFilter>("ALL");
   const availableRoles: UserRole[] =
     user?.role === "SUPERADMIN" ? ["SUPERADMIN", ...baseRoles] : baseRoles;
   const createRoleOptions: UserRole[] =
@@ -102,12 +105,21 @@ export default function EmployeesPage() {
         : baseRoles;
   const directoryRoleOptions: UserRole[] =
     user?.role === "MANAGER" ? ["EMPLOYEE", "INTERN"] : availableRoles;
+  const directoryRoleFilterOptions = useMemo(() => sortedUniqueRoles(users), [users]);
 
   const fieldStyle = {
     borderColor: "var(--border)",
     background: "var(--surface-soft)",
     color: "var(--text-main)",
   } as const;
+  const filteredDirectoryUsers = useMemo(
+    () =>
+      filterMembersForPicker(users, {
+        searchQuery: directorySearchQuery,
+        roleFilter: directoryRoleFilter,
+      }),
+    [users, directorySearchQuery, directoryRoleFilter]
+  );
 
   const loadTeam = async (append = false) => {
     const offset = append ? nextUserOffset : 0;
@@ -622,7 +634,18 @@ export default function EmployeesPage() {
                 </p>
                 <h2 className="mt-1 text-lg font-semibold text-[var(--text-main)] sm:text-xl">Current team</h2>
               </div>
-              <span className="text-sm text-[var(--text-soft)]">{users.length} members</span>
+              <span className="text-sm text-[var(--text-soft)]">
+                {filteredDirectoryUsers.length}/{users.length} members
+              </span>
+            </div>
+            <div className="mt-4">
+              <MemberPickerToolbar
+                searchQuery={directorySearchQuery}
+                onSearchChange={setDirectorySearchQuery}
+                roleFilter={directoryRoleFilter}
+                onRoleFilterChange={setDirectoryRoleFilter}
+                roleOptions={directoryRoleFilterOptions}
+              />
             </div>
 
             {dataLoading ? (
@@ -630,6 +653,10 @@ export default function EmployeesPage() {
             ) : users.length === 0 ? (
               <p className="mt-6 rounded-xl border border-dashed p-8 text-center text-sm text-[var(--text-soft)]">
                 No team members yet.
+              </p>
+            ) : filteredDirectoryUsers.length === 0 ? (
+              <p className="mt-6 rounded-xl border border-dashed p-8 text-center text-sm text-[var(--text-soft)]">
+                No matching members. Try a different search or role filter.
               </p>
             ) : (
               <div
@@ -650,7 +677,7 @@ export default function EmployeesPage() {
                     </tr>
                   </thead>
                   <tbody style={{ background: "var(--surface-strong)", color: "var(--text-soft)" }}>
-                    {users.map((member) => {
+                    {filteredDirectoryUsers.map((member) => {
                       const assignmentLocked =
                         !canManageMemberRow(member) ||
                         (member.role === "SUPERADMIN" && user.role !== "SUPERADMIN");
