@@ -8,9 +8,8 @@ import { renderSessionGate } from "@/components/shared/session-gate";
 import { useRealtimeRefresh } from "@/hooks/use-realtime-refresh";
 import { useSession } from "@/hooks/use-session";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api";
-import { getTaskAssignableRoles } from "@/lib/dashboard";
 import { TASK_PRIORITY_OPTIONS, groupTasksByAssignees } from "@/lib/task-groups";
-import type { CRMUser, Department, Project, Task, TaskPriority } from "@/types/crm";
+import type { CRMUser, Department, Project, Task, TaskPriority, UserRole } from "@/types/crm";
 type PaginatedResponse<T> = { items: T[]; total: number; hasMore: boolean; nextOffset: number };
 
 const columns: Array<{ key: Task["status"]; label: string; tone: string }> = [
@@ -18,6 +17,7 @@ const columns: Array<{ key: Task["status"]; label: string; tone: string }> = [
   { key: "IN_PROGRESS", label: "In Progress", tone: "bg-amber-500" },
   { key: "DONE", label: "Completed", tone: "bg-emerald-500" },
 ];
+const PROJECT_MEMBER_ROLES: UserRole[] = ["ADMIN", "MANAGER", "EMPLOYEE", "INTERN"];
 
 function Surface({ children }: { children: ReactNode }) {
   return (
@@ -85,10 +85,7 @@ export default function ProjectsPage() {
     color: "var(--text-main)",
   } as const;
 
-  const assignableRoles = useMemo(
-    () => (user ? getTaskAssignableRoles(user.role) : []),
-    [user]
-  );
+  const assignableRoles = PROJECT_MEMBER_ROLES;
   const loadProjects = async (append = false) => {
     const offset = append ? nextProjectOffset : 0;
     const [projectPage, departmentData, userData] = await Promise.all([
@@ -809,9 +806,7 @@ export default function ProjectsPage() {
                   <p className="text-sm font-medium text-[var(--text-main)]">
                     {(selectedProject.members ?? []).length > 0
                       ? "Assign to project team members (list filtered from your saved roster above)"
-                      : user?.role === "SUPERADMIN"
-                        ? "Assign to team (including admins and managers)"
-                        : "Assign to employees or interns"}
+                      : "Assign to team members (admins, managers, employees, and interns)"}
                   </p>
                   <div className="mt-3">
                     <MemberPickerToolbar

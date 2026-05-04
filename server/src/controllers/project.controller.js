@@ -71,7 +71,7 @@ function rosterRolesForActor(actorRole) {
   if (actorRole === "SUPERADMIN" || actorRole === "ADMIN") {
     return ["SUPERADMIN", "ADMIN", "MANAGER", "EMPLOYEE", "INTERN"];
   }
-  return ["EMPLOYEE", "INTERN"];
+  return ["ADMIN", "MANAGER", "EMPLOYEE", "INTERN"];
 }
 
 export async function getProjects(req, res) {
