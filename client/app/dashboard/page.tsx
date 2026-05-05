@@ -2486,9 +2486,9 @@ export default function DashboardPage() {
 
   return (
     <CRMShell user={user}>
-      <div className="space-y-5">
+      <div className="space-y-4">
         <Surface className="overflow-hidden p-0">
-          <div className="grid gap-6 px-6 py-6 xl:grid-cols-[1.15fr_0.85fr]">
+          <div className="grid gap-4 px-4 py-4 xl:grid-cols-[1.1fr_0.9fr]">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[var(--text-faint)]">
                 {summary.scope === "superadmin"
@@ -2497,25 +2497,21 @@ export default function DashboardPage() {
                     ? "Admin command center"
                     : "Personal command center"}
               </p>
-              <h1 className="mt-3 text-4xl font-semibold tracking-tight text-[var(--text-main)]">
+              <h1 className="mt-2 text-3xl font-semibold tracking-tight text-[var(--text-main)]">
                 Welcome back, {user.name.split(" ")[0]}
               </h1>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--text-soft)]">
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--text-soft)]">
                 {leadershipView
-                  ? "Track live organization health, review employee and intern performance, and drill into attendance, working hours, and progress from one cleaner dashboard."
-                  : "See your attendance, working hours, task movement, and daily progress in a more visual workspace."}
+                  ? "Track key team health and progress in one place."
+                  : "See your daily attendance, work hours, and progress quickly."}
               </p>
 
-              <div className="mt-6 grid max-w-2xl gap-3 sm:grid-cols-3">
+              <div className="mt-4 grid max-w-2xl gap-2 sm:grid-cols-2">
                 <div className="rounded-xl border px-4 py-3" style={{ borderColor: "var(--border)", background: "var(--surface-soft)" }}>
                   <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--text-faint)]">Focus</p>
                   <p className="mt-1 text-sm font-semibold text-[var(--text-main)]">
                     {leadershipView ? "Operations" : "My work"}
                   </p>
-                </div>
-                <div className="rounded-xl border px-4 py-3" style={{ borderColor: "var(--border)", background: "var(--surface-soft)" }}>
-                  <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--text-faint)]">Flow</p>
-                  <p className="mt-1 text-sm font-semibold text-[var(--text-main)]">Scroll workspace</p>
                 </div>
                 <div className="rounded-xl border px-4 py-3" style={{ borderColor: "var(--border)", background: "var(--surface-soft)" }}>
                   <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--text-faint)]">Mode</p>
@@ -2525,37 +2521,30 @@ export default function DashboardPage() {
             </div>
 
             <div
-              className="rounded-[24px] border p-5"
+              className="rounded-[20px] border p-4"
               style={{
                 borderColor: "var(--border)",
                 background:
                   "linear-gradient(135deg, color-mix(in srgb, var(--accent) 10%, var(--surface)) 0%, var(--surface-soft) 100%)",
               }}
             >
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="rounded-[20px] border p-4" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="rounded-2xl border p-3" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
                   <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--text-faint)]">Completion rate</p>
-                  <p className="mt-2 text-3xl font-semibold text-[var(--text-main)]">{completionRate}%</p>
-                  <p className="mt-2 text-sm text-[var(--text-soft)]">
-                    {leadershipView ? "Org-level task completion snapshot" : "Your completed work snapshot"}
-                  </p>
+                  <p className="mt-1 text-2xl font-semibold text-[var(--text-main)]">{completionRate}%</p>
                 </div>
-                <div className="rounded-[20px] border p-4" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+                <div className="rounded-2xl border p-3" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
                   <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--text-faint)]">Latest work hours</p>
-                  <p className="mt-2 text-3xl font-semibold text-[var(--text-main)]">{heroHoursValue}h</p>
-                  <p className="mt-2 text-sm text-[var(--text-soft)]">
-                    {leadershipView ? "Average recent working-hour trend" : "Your latest tracked work-hour signal"}
-                  </p>
+                  <p className="mt-1 text-2xl font-semibold text-[var(--text-main)]">{heroHoursValue}h</p>
                 </div>
               </div>
 
               <div
-                className="mt-4 rounded-[20px] border p-4"
+                className="mt-3 rounded-2xl border p-3"
                 style={{ borderColor: "var(--border)", background: "var(--surface)" }}
               >
                 <p className="text-sm font-semibold text-[var(--text-main)]">Momentum</p>
-                <p className="mt-1 text-sm text-[var(--text-soft)]">Recent progress trend across the workspace.</p>
-                <div className="mt-3 h-24 overflow-hidden rounded-xl border p-2" style={{ borderColor: "var(--border)", background: "var(--surface-soft)" }}>
+                <div className="mt-2 h-20 overflow-hidden rounded-xl border p-2" style={{ borderColor: "var(--border)", background: "var(--surface-soft)" }}>
                   <svg viewBox="0 0 360 80" className="h-full w-full" aria-hidden="true">
                     <path
                       d={buildLinePath(
@@ -2609,7 +2598,7 @@ export default function DashboardPage() {
 
         {activeDashboardTab === "analytics" ? (
           <>
-            <section className="space-y-5" id="overview-section">
+            <section className="space-y-4" id="overview-section">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-faint)]">Analytics snapshot</p>
                 <h2 className="mt-2 text-2xl font-semibold text-[var(--text-main)]">Core metrics</h2>
@@ -2720,93 +2709,12 @@ export default function DashboardPage() {
               </div>
             </section>
 
-            <section className="space-y-5" id="analytics-section">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-faint)]">Decision support</p>
-                <h2 className="mt-2 text-2xl font-semibold text-[var(--text-main)]">Analytics details</h2>
-              </div>
-              {summary.scope !== "employee" ? (
-                <>
-                  <div className="grid gap-4 xl:grid-cols-2">
-                    <HeatmapGrid
-                      title="Team attendance heatmap"
-                      subtitle="Daily participation trend across your organization."
-                      items={summary.analytics.attendanceHeatmap}
-                    />
-                    <DonutChartCard
-                      title="Attendance split (employees + interns)"
-                      subtitle="Real-time check-in status across the active workforce."
-                      items={[
-                        { label: "Checked in", value: activeAttendance, color: "var(--success)" },
-                        { label: "Not checked in", value: inactiveAttendance, color: "var(--text-faint)" },
-                      ]}
-                    />
-                  </div>
-                  <div className="grid gap-4 xl:grid-cols-2">
-                    <DonutChartCard
-                      title="Total work progress"
-                      subtitle="Completed vs remaining tasks across all departments."
-                      items={[
-                        { label: "Completed", value: completedTasks, color: "var(--success)" },
-                        { label: "In progress", value: inProgressEstimate, color: "var(--accent)" },
-                        { label: "Pending", value: pendingEstimate, color: "var(--text-faint)" },
-                      ]}
-                    />
-                    <DonutChartCard
-                      title="Department progress contribution"
-                      subtitle="Share of completed work by department."
-                      items={
-                        departmentPieItems.length
-                          ? departmentPieItems
-                          : [{ label: "No completed tasks yet", value: 1, color: "var(--text-faint)" }]
-                      }
-                    />
-                  </div>
-                  <div className="grid gap-4 xl:grid-cols-3">
-                    <TeamProductivityScoreCard
-                      score={teamProductivityScore}
-                      completionRate={completionRate}
-                      attendanceRate={attendanceRate}
-                      momentum={progressDelta}
-                    />
-                    <WeeklyForecastCard
-                      forecastPercent={forecastCompletionRate}
-                      forecastCompleted={forecastCompleted}
-                      baseCompleted={completedTasks}
-                    />
-                    <RiskAlertsCard alerts={riskAlerts} />
-                  </div>
-                  <div className="grid gap-4 xl:grid-cols-2">
-                    <PerformerListCard
-                      title="Top performers"
-                      subtitle="Highest consistency across progress and attendance."
-                      items={topPerformers}
-                    />
-                    <PerformerListCard
-                      title="Needs support"
-                      subtitle="Lowest current consistency scores."
-                      items={needsSupport}
-                    />
-                  </div>
-                </>
-              ) : (
-                <div className="grid gap-4 xl:grid-cols-2">
-                  <HeatmapGrid
-                    title="Attendance heatmap"
-                    subtitle="Your attendance intensity over recent days."
-                    items={summary.analytics.attendanceHeatmap}
-                  />
-                  <DonutChartCard
-                    title="Task status breakdown"
-                    subtitle="Visual split of your current workload."
-                    items={[
-                      { label: "Pending", value: pendingEstimate, color: "var(--text-faint)" },
-                      { label: "In progress", value: inProgressEstimate, color: "var(--accent)" },
-                      { label: "Done", value: summary.metrics.completedTasks, color: "var(--success)" },
-                    ]}
-                  />
-                </div>
-              )}
+            <section className="space-y-4" id="analytics-section">
+              <HeatmapGrid
+                title={summary.scope === "employee" ? "Attendance heatmap" : "Team attendance heatmap"}
+                subtitle="Recent attendance pattern."
+                items={summary.analytics.attendanceHeatmap}
+              />
             </section>
           </>
         ) : (

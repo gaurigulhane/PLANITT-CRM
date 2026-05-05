@@ -25,10 +25,13 @@ export default function LoginPage() {
 
     const query = new URLSearchParams(window.location.search);
     const queryState = query.get("google");
+    const token = query.get("token");
     const state = queryState;
 
     if (state === "connected") {
-      setToken("cookie-session");
+      if (token) {
+        setToken(token);
+      }
       window.history.replaceState({}, document.title, "/login");
       router.push("/dashboard");
       return;
@@ -83,7 +86,9 @@ export default function LoginPage() {
         throw new Error(message);
       }
 
-      setToken("cookie-session");
+      if (typeof json?.token === "string" && json.token.length > 0) {
+        setToken(json.token);
+      }
       router.push("/dashboard");
     } catch (err) {
       if (err instanceof TypeError && err.message.toLowerCase().includes("fetch")) {

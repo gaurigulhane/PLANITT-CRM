@@ -43,8 +43,20 @@ export const viewport: Viewport = {
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  const themeBootstrapScript = `
+    try {
+      var key = 'crm-theme';
+      var raw = window.localStorage.getItem(key);
+      var theme = raw === 'dark' || raw === 'light' ? raw : 'light';
+      document.documentElement.dataset.theme = theme;
+    } catch (_) {}
+  `;
+
   return (
     <html lang="en" data-scroll-behavior="smooth" data-theme={DEFAULT_CRM_THEME} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeBootstrapScript }} />
+      </head>
       <body className={`${manrope.variable} font-sans antialiased`}>
         <ThemeProvider>
           <BackendKeepAlive />

@@ -279,7 +279,11 @@ export async function handleGoogleLoginCallback(req, res) {
 
     const appToken = signToken(user);
     setAuthCookie(res, appToken);
-    return res.redirect(`${loginUrl}?google=connected`);
+    const tokenQuery = new URLSearchParams({
+      google: "connected",
+      token: appToken,
+    });
+    return res.redirect(`${loginUrl}?${tokenQuery.toString()}`);
   } catch (_err) {
     return res.redirect(`${loginUrl}?google=failed`);
   }

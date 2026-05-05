@@ -1,4 +1,5 @@
 import { normalizeErrorMessage } from "./error-message";
+import { getToken } from "./auth";
 
 const FALLBACK_API_ORIGIN = "http://localhost:5000";
 
@@ -34,7 +35,17 @@ type ApiError = Error & {
 
 async function request(input: string, init?: RequestInit) {
   try {
-    return await fetch(input, init);
+    const token = getToken();
+    const headers = new Headers(init?.headers ?? undefined);
+
+    if (token && !headers.has("Authorization")) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+
+    return await fetch(input, {
+      ...init,
+      headers,
+    });
   } catch (error) {
     const networkError = new Error(
       `Unable to reach API at ${resolveApiBaseUrl()}. Check that backend server is running and NEXT_PUBLIC_API_URL is correct.`

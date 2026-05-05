@@ -4,6 +4,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useState,
@@ -33,6 +34,20 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const next = stored ?? DEFAULT_CRM_THEME;
     setThemeState(next);
     document.documentElement.dataset.theme = next;
+  }, []);
+
+  useEffect(() => {
+    function handleStorage(event: StorageEvent) {
+      if (event.key !== CRM_THEME_STORAGE_KEY) {
+        return;
+      }
+      const next = readStoredTheme() ?? DEFAULT_CRM_THEME;
+      setThemeState(next);
+      document.documentElement.dataset.theme = next;
+    }
+
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
   }, []);
 
   const setTheme = useCallback((nextTheme: CRMThemeMode) => {
