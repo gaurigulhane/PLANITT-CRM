@@ -132,7 +132,7 @@ export function CRMShell({ children, user }: CRMShellProps) {
 
   return (
     <div
-      className={`min-h-screen min-w-0 overflow-x-clip text-[var(--text-main)] ${darkWorkspace ? "crm-shell-dark" : ""}`}
+      className={`min-h-screen min-w-0 overflow-x-clip text-[var(--text-main)] lg:h-screen lg:overflow-hidden ${darkWorkspace ? "crm-shell-dark" : ""}`}
       style={{
         background:
           "linear-gradient(135deg, color-mix(in srgb, var(--app-bg) 92%, white), var(--app-bg-accent))",
@@ -185,11 +185,11 @@ export function CRMShell({ children, user }: CRMShellProps) {
         />
       ) : null}
 
-      <div className="mx-auto flex min-h-screen max-w-[1680px] flex-col gap-3 px-2 pb-3 pt-[3.75rem] sm:px-3 sm:py-3 lg:flex-row lg:px-3 lg:pt-3">
+      <div className="flex min-h-screen flex-col gap-3 px-2 pb-3 pt-[3.75rem] sm:px-3 sm:py-3 lg:h-screen lg:flex-row lg:gap-0 lg:overflow-hidden lg:px-0 lg:pb-0 lg:pt-0">
         <aside
-          className={`fixed bottom-0 left-0 top-14 z-50 w-[min(288px,90vw)] overflow-hidden rounded-r-lg border px-3 py-3 shadow-xl transition-transform duration-200 ease-out lg:static lg:top-auto lg:z-auto lg:w-[214px] lg:shrink-0 lg:rounded-lg lg:shadow-none lg:transition-none ${
+          className={`fixed bottom-0 left-0 top-14 z-50 w-[min(288px,90vw)] overflow-hidden rounded-r-lg border px-3 py-3 shadow-xl transition-transform duration-200 ease-out lg:relative lg:top-0 lg:z-30 lg:h-full lg:w-[240px] lg:shrink-0 lg:rounded-none lg:border-b-0 lg:border-l-0 lg:border-r lg:border-t-0 lg:shadow-none lg:transition-none ${
             mobileNavOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
-          } lg:sticky lg:top-3 lg:h-[calc(100vh-1.5rem)]`}
+          }`}
           style={{
             background: darkWorkspace
               ? "linear-gradient(180deg, #071120 0%, #0b1626 100%)"
@@ -275,9 +275,9 @@ export function CRMShell({ children, user }: CRMShellProps) {
           </div>
         </aside>
 
-        <main className="min-h-0 min-w-0 flex-1">
+        <main className="min-h-0 min-w-0 flex-1 overflow-x-hidden lg:flex lg:h-full lg:flex-col lg:overflow-hidden lg:p-3">
           <header
-            className="mb-3 flex flex-col gap-3 rounded-lg border px-4 py-3 md:flex-row md:items-center md:justify-between"
+            className="mb-3 flex shrink-0 flex-col gap-3 rounded-lg border px-4 py-3 md:flex-row md:items-center md:justify-between"
             style={{
               background: "var(--surface)",
               borderColor: "var(--border)",
@@ -411,7 +411,7 @@ export function CRMShell({ children, user }: CRMShellProps) {
               <p className="mt-1 text-xs text-[var(--text-soft)]">{latestItem.message}</p>
             </button>
           ) : null}
-          {children}
+          <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden lg:flex lg:flex-col lg:overflow-y-auto">{children}</div>
         </main>
       </div>
     </div>

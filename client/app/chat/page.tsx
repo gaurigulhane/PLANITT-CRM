@@ -1,143 +1,54 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CRMShell } from "@/components/layout/crm-shell";
 import { useSocket } from "@/components/providers/socket-provider";
 import { StatePanel } from "@/components/shared/state-panel";
 import { renderSessionGate } from "@/components/shared/session-gate";
 import { useSession } from "@/hooks/use-session";
-import { apiDelete, apiGet, apiPost, apiPostForm, apiPut, resolveApiOrigin } from "@/lib/api";
+import { useChatMessages } from "@/hooks/use-chat-messages";
+import { useChatGroups } from "@/hooks/use-chat-groups";
+import { useChatMedia } from "@/hooks/use-chat-media";
+import { ChatRoomList } from "@/components/chat/chat-room-list";
+import { ChatMessageBubble } from "@/components/chat/chat-message-bubble";
+import { CreateGroupModal, GroupSettingsDrawer, MediaPanelDrawer } from "@/components/chat/chat-modals";
+import { apiGet, apiPost } from "@/lib/api";
 import { normalizeErrorMessage } from "@/lib/error-message";
-import type {
-  CRMUser,
-  ChatAttachmentUploadResponse,
-  ChatGroup,
-  ChatGroupMember,
-  ChatMediaTypeFilter,
-  ChatMessage,
-  ChatRoom,
-  ChatRoomsResponse,
-} from "@/types/crm";
-
-type ChatMessagesPage = {
-  messages: ChatMessage[];
-  hasMore: boolean;
-  nextBefore: string | null;
-};
-
-function roomKey(room: ChatRoom) {
-  return `${room.type}:${room.id}`;
-}
-
-function messageRoomKey(message: ChatMessage) {
-  const id =
-    message.channelType === "DEPARTMENT"
-      ? message.departmentId
-      : message.channelType === "PROJECT"
-        ? message.projectId
-        : message.groupId;
-  return `${message.channelType}:${id}`;
-}
-
-function formatTime(value: string) {
-  return new Date(value).toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function resolveAttachmentUrl(url?: string | null) {
-  if (!url) {
-    return "";
-  }
-  if (url.startsWith("http://") || url.startsWith("https://")) {
-    return url;
-  }
-  return `${resolveApiOrigin()}${url}`;
-}
-
-function initials(name: string) {
-  return name
-    .split(" ")
-    .map((part) => part[0] || "")
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-}
-
-function extractUrls(text: string) {
-  const matches = text.match(/https?:\/\/[^\s]+/g);
-  return matches ?? [];
-}
-
-function getUrlLabel(url: string) {
-  const normalized = url.toLowerCase();
-  if (normalized.includes("drive.google.com/drive/folders/")) {
-    return "Open Drive folder";
-  }
-  if (normalized.includes("drive.google.com/file/")) {
-    return "Open file";
-  }
-  if (normalized.includes("docs.google.com/spreadsheets/")) {
-    return "Open Sheet";
-  }
-  if (normalized.includes("meet.google.com")) {
-    return "Open Meet";
-  }
-  if (normalized.includes("calendar.google.com")) {
-    return "Open Calendar";
-  }
-  return "Open link";
-}
+import { roomKey } from "@/components/chat/chat-utils";
+import type { CRMUser, ChatRoomsResponse } from "@/types/crm";
 
 export default function ChatPage() {
   const { user, loading: sessionLoading, error: sessionError, retry: retrySession } = useSession();
-  const { socket, connected } = useSocket();
+  const { connected } = useSocket();
   const [rooms, setRooms] = useState<ChatRoomsResponse>({ departments: [], projects: [], groups: [] });
   const [selectedKey, setSelectedKey] = useState("");
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [draft, setDraft] = useState("");
   const [loading, setLoading] = useState(true);
-  const [messagesLoading, setMessagesLoading] = useState(false);
-  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
-  const [hasMoreMessages, setHasMoreMessages] = useState(false);
-  const [nextBeforeCursor, setNextBeforeCursor] = useState<string | null>(null);
-  const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
-  const [search, setSearch] = useState("");
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
-  const [showCreateGroup, setShowCreateGroup] = useState(false);
-  const [groupName, setGroupName] = useState("");
-  const [groupDescription, setGroupDescription] = useState("");
-  const [groupMemberIds, setGroupMemberIds] = useState<string[]>([]);
   const [users, setUsers] = useState<CRMUser[]>([]);
-  const [showGroupSettings, setShowGroupSettings] = useState(false);
-  const [activeGroup, setActiveGroup] = useState<ChatGroup | null>(null);
-  const [activeGroupMembers, setActiveGroupMembers] = useState<ChatGroupMember[]>([]);
-  const [groupSaving, setGroupSaving] = useState(false);
-  const [showMediaPanel, setShowMediaPanel] = useState(false);
-  const [mediaFilter, setMediaFilter] = useState<ChatMediaTypeFilter>("ALL");
-  const [mediaItems, setMediaItems] = useState<ChatMessage[]>([]);
-  const [mediaLoading, setMediaLoading] = useState(false);
-  const [mediaDeletingId, setMediaDeletingId] = useState<string | null>(null);
-  const [selectedMediaIds, setSelectedMediaIds] = useState<string[]>([]);
-  const [bulkDeletingMedia, setBulkDeletingMedia] = useState(false);
-  const messageEndRef = useRef<HTMLDivElement | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [draft, setDraft] = useState("");
 
   const allRooms = useMemo(() => [...rooms.departments, ...rooms.projects, ...rooms.groups], [rooms]);
-  const selectedRoom = allRooms.find((room) => roomKey(room) === selectedKey) ?? null;
+  const selectedRoom = allRooms.find((r) => roomKey(r) === selectedKey) ?? null;
   const canManageGroups = user ? ["SUPERADMIN", "ADMIN", "MANAGER"].includes(user.role) : false;
-  const canClearChat = user ? ["SUPERADMIN", "ADMIN", "MANAGER"].includes(user.role) : false;
+  const canClearChat = canManageGroups;
+
   const chatAnalytics = useMemo(() => {
-    const totalRooms = rooms.departments.length + rooms.projects.length + rooms.groups.length;
-    const unreadTotal = allRooms.reduce((sum, room) => sum + (room.unreadCount ?? 0), 0);
-    const totalMessages = messages.length;
-    const attachmentMessages = messages.filter((message) => Boolean(message.attachmentUrl)).length;
-    return { totalRooms, unreadTotal, totalMessages, attachmentMessages };
-  }, [rooms, allRooms, messages]);
+    const totalRooms = allRooms.length;
+    const unreadTotal = allRooms.reduce((s, r) => s + (r.unreadCount ?? 0), 0);
+    const attachmentMessages = 0;
+    return { totalRooms, unreadTotal, totalMessages: 0, attachmentMessages };
+  }, [allRooms]);
+
+  const refreshRooms = async () => {
+    const data = await apiGet<ChatRoomsResponse>("/chat/rooms");
+    setRooms(data);
+  };
+
+  const messages_ = useChatMessages(selectedRoom, user, setError);
+
+  const groups_ = useChatGroups(setError, refreshRooms);
+
+  const media_ = useChatMedia(selectedRoom, setError, messages_.setMessages);
 
   useEffect(() => {
     async function loadRooms() {
@@ -146,462 +57,46 @@ export default function ChatPage() {
         setError("");
         const data = await apiGet<ChatRoomsResponse>("/chat/rooms");
         setRooms(data);
-        const firstRoom = data.departments[0] ?? data.projects[0] ?? data.groups[0];
-        setSelectedKey((current) => current || (firstRoom ? roomKey(firstRoom) : ""));
+        const first = data.departments[0] ?? data.projects[0] ?? data.groups[0];
+        setSelectedKey((cur) => cur || (first ? roomKey(first) : ""));
       } catch (err) {
         setError(normalizeErrorMessage(err, "Failed to load chat rooms"));
       } finally {
         setLoading(false);
       }
     }
-
-    if (user) {
-      void loadRooms();
-    }
+    if (user) void loadRooms();
   }, [user]);
 
   useEffect(() => {
-    async function loadUsers() {
-      if (!canManageGroups) {
-        return;
-      }
-      try {
-        const data = await apiGet<CRMUser[]>("/users");
-        setUsers(data);
-      } catch (_err) {
-        setUsers([]);
-      }
-    }
-    void loadUsers();
+    if (!canManageGroups) return;
+    apiGet<CRMUser[]>("/users")
+      .then(setUsers)
+      .catch(() => setUsers([]));
   }, [canManageGroups]);
 
   useEffect(() => {
-    async function loadMessages() {
-      if (!selectedRoom) {
-        setMessages([]);
-        setReplyTo(null);
-        setHasMoreMessages(false);
-        setNextBeforeCursor(null);
-        return;
-      }
+    if (!selectedRoom) return;
+    setRooms((cur) => ({
+      departments: cur.departments.map((r) =>
+        r.id === selectedRoom.id && r.type === selectedRoom.type ? { ...r, unreadCount: 0 } : r,
+      ),
+      projects: cur.projects.map((r) =>
+        r.id === selectedRoom.id && r.type === selectedRoom.type ? { ...r, unreadCount: 0 } : r,
+      ),
+      groups: cur.groups.map((r) =>
+        r.id === selectedRoom.id && r.type === selectedRoom.type ? { ...r, unreadCount: 0 } : r,
+      ),
+    }));
+  }, [selectedRoom?.id]);
 
-      try {
-        setMessagesLoading(true);
-        setError("");
-        const params = new URLSearchParams({
-          type: selectedRoom.type,
-          id: selectedRoom.id,
-        });
-        params.set("limit", "40");
-        const data = await apiGet<ChatMessagesPage>(`/chat/messages?${params.toString()}`);
-        setMessages(data.messages);
-        setHasMoreMessages(data.hasMore);
-        setNextBeforeCursor(data.nextBefore);
-        await apiPost<{ success: boolean }>("/chat/read", {
-          channelType: selectedRoom.type,
-          channelId: selectedRoom.id,
-        });
-        setRooms((current) => ({
-          departments: current.departments.map((room) =>
-            room.id === selectedRoom.id && room.type === selectedRoom.type ? { ...room, unreadCount: 0 } : room
-          ),
-          projects: current.projects.map((room) =>
-            room.id === selectedRoom.id && room.type === selectedRoom.type ? { ...room, unreadCount: 0 } : room
-          ),
-          groups: current.groups.map((room) =>
-            room.id === selectedRoom.id && room.type === selectedRoom.type ? { ...room, unreadCount: 0 } : room
-          ),
-        }));
-      } catch (err) {
-        setMessages([]);
-        setError(normalizeErrorMessage(err, "Failed to load messages"));
-      } finally {
-        setMessagesLoading(false);
-      }
-    }
-
-    void loadMessages();
-  }, [selectedRoom?.id, selectedRoom?.type]);
-
-  const loadOlderMessages = async () => {
-    if (!selectedRoom || !nextBeforeCursor || loadingOlderMessages) {
-      return;
-    }
-    try {
-      setLoadingOlderMessages(true);
-      const params = new URLSearchParams({
-        type: selectedRoom.type,
-        id: selectedRoom.id,
-        limit: "40",
-        before: nextBeforeCursor,
-      });
-      const data = await apiGet<ChatMessagesPage>(`/chat/messages?${params.toString()}`);
-      setMessages((current) => [...data.messages, ...current]);
-      setHasMoreMessages(data.hasMore);
-      setNextBeforeCursor(data.nextBefore);
-    } catch (err) {
-      setError(normalizeErrorMessage(err, "Failed to load older messages"));
-    } finally {
-      setLoadingOlderMessages(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!socket || !selectedRoom) {
-      return;
-    }
-
-    const handleMessage = (message: ChatMessage) => {
-      if (messageRoomKey(message) !== roomKey(selectedRoom)) {
-        return;
-      }
-
-      setMessages((current) =>
-        current.some((existing) => existing.id === message.id) ? current : [...current, message]
-      );
-    };
-
-    const handleMessageUpdate = (message: ChatMessage) => {
-      if (messageRoomKey(message) !== roomKey(selectedRoom)) {
-        return;
-      }
-
-      setMessages((current) => current.map((item) => (item.id === message.id ? message : item)));
-      setReplyTo((current) => (current?.id === message.id ? message : current));
-    };
-
-    socket.on("chat:message", handleMessage);
-    socket.on("chat:message:update", handleMessageUpdate);
-
-    return () => {
-      socket.off("chat:message", handleMessage);
-      socket.off("chat:message:update", handleMessageUpdate);
-    };
-  }, [socket, selectedRoom]);
-
-  useEffect(() => {
-    messageEndRef.current?.scrollIntoView({ block: "end" });
-  }, [messages.length, selectedKey]);
-
-  useEffect(() => {
-    const onGlobalClick = () => setOpenMenuId(null);
-    window.addEventListener("click", onGlobalClick);
-    return () => window.removeEventListener("click", onGlobalClick);
-  }, []);
-
-  const sendMessage = async () => {
-    if (!selectedRoom || (!draft.trim() && !selectedFile)) {
-      return;
-    }
-
-    try {
-      setSending(true);
-      setError("");
-      let attachmentPayload: ChatAttachmentUploadResponse | null = null;
-
-      if (selectedFile) {
-        const formData = new FormData();
-        formData.append("file", selectedFile);
-        formData.append("channelType", selectedRoom.type);
-        formData.append("channelId", selectedRoom.id);
-        attachmentPayload = await apiPostForm<ChatAttachmentUploadResponse>("/chat/attachments", formData);
-      }
-
-      const message = await apiPost<ChatMessage>("/chat/messages", {
-        channelType: selectedRoom.type,
-        channelId: selectedRoom.id,
-        content: draft,
-        messageType: attachmentPayload?.messageType ?? "TEXT",
-        attachmentUrl: attachmentPayload?.attachmentUrl ?? null,
-        attachmentMimeType: attachmentPayload?.attachmentMimeType ?? null,
-        attachmentFileName: attachmentPayload?.attachmentFileName ?? null,
-        replyToId: replyTo?.id ?? null,
-      });
-      setMessages((current) =>
-        current.some((existing) => existing.id === message.id) ? current : [...current, message]
-      );
-      setDraft("");
-      setSelectedFile(null);
-      setReplyTo(null);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
-    } catch (err) {
-      setError(normalizeErrorMessage(err, "Failed to send message"));
-    } finally {
-      setSending(false);
-    }
-  };
-
-  const deleteMessage = async (messageId: string) => {
-    await deleteMessageWithMode(messageId, "everyone");
-  };
-
-  const deleteMessageWithMode = async (messageId: string, mode: "me" | "everyone") => {
-    try {
-      setError("");
-      await apiDelete<{ success: boolean }>(`/chat/messages/${messageId}?mode=${mode}`);
-      if (mode === "me") {
-        setMessages((current) => current.filter((item) => item.id !== messageId));
-        setReplyTo((current) => (current?.id === messageId ? null : current));
-        return;
-      }
-      setMessages((current) =>
-        current.map((item) =>
-          item.id === messageId
-            ? {
-                ...item,
-                isDeleted: true,
-                deletedAt: new Date().toISOString(),
-                content: "This message was deleted",
-                messageType: "TEXT",
-                attachmentUrl: null,
-                attachmentMimeType: null,
-                attachmentFileName: null,
-              }
-            : item
-        )
-      );
-      setReplyTo((current) => (current?.id === messageId ? null : current));
-    } catch (err) {
-      setError(normalizeErrorMessage(err, "Failed to delete message"));
-    }
-  };
-
-  const filteredMessages = useMemo(() => {
-    if (!search.trim()) {
-      return messages;
-    }
-    const q = search.toLowerCase();
-    return messages.filter(
-      (message) =>
-        message.content.toLowerCase().includes(q) ||
-        message.author.name.toLowerCase().includes(q) ||
-        (message.attachmentFileName || "").toLowerCase().includes(q)
-    );
-  }, [messages, search]);
-
-  const refreshRooms = async () => {
-    const data = await apiGet<ChatRoomsResponse>("/chat/rooms");
-    setRooms(data);
-  };
-
-  const createGroup = async () => {
-    if (!groupName.trim()) {
-      return;
-    }
-    try {
-      setGroupSaving(true);
-      await apiPost<ChatGroup>("/chat/groups", {
-        name: groupName,
-        description: groupDescription,
-        memberIds: groupMemberIds,
-      });
-      setShowCreateGroup(false);
-      setGroupName("");
-      setGroupDescription("");
-      setGroupMemberIds([]);
-      await refreshRooms();
-    } catch (err) {
-      setError(normalizeErrorMessage(err, "Failed to create group"));
-    } finally {
-      setGroupSaving(false);
-    }
-  };
-
-  const openGroupSettings = async () => {
-    if (!selectedRoom || selectedRoom.type !== "GROUP") {
-      return;
-    }
-    try {
-      const [group, members] = await Promise.all([
-        apiGet<ChatGroup>(`/chat/groups/${selectedRoom.id}`),
-        apiGet<ChatGroupMember[]>(`/chat/groups/${selectedRoom.id}/members`),
-      ]);
-      setActiveGroup(group);
-      setActiveGroupMembers(members);
-      setShowGroupSettings(true);
-    } catch (err) {
-      setError(normalizeErrorMessage(err, "Failed to load group settings"));
-    }
-  };
-
-  const updateGroup = async () => {
-    if (!activeGroup) {
-      return;
-    }
-    try {
-      setGroupSaving(true);
-      const updated = await apiPut<ChatGroup>(`/chat/groups/${activeGroup.id}`, {
-        name: activeGroup.name,
-        description: activeGroup.description || "",
-      });
-      setActiveGroup(updated);
-      await refreshRooms();
-    } catch (err) {
-      setError(normalizeErrorMessage(err, "Failed to update group"));
-    } finally {
-      setGroupSaving(false);
-    }
-  };
-
-  const addMembersToGroup = async (memberIds: string[]) => {
-    if (!activeGroup || !memberIds.length) {
-      return;
-    }
-    try {
-      const members = await apiPost<ChatGroupMember[]>(`/chat/groups/${activeGroup.id}/members`, { memberIds });
-      setActiveGroupMembers(members);
-      await refreshRooms();
-    } catch (err) {
-      setError(normalizeErrorMessage(err, "Failed to add members"));
-    }
-  };
-
-  const removeMemberFromGroup = async (memberId: string) => {
-    if (!activeGroup) {
-      return;
-    }
-    try {
-      await apiDelete<{ success: boolean }>(`/chat/groups/${activeGroup.id}/members/${memberId}`);
-      setActiveGroupMembers((current) => current.filter((item) => item.userId !== memberId));
-      await refreshRooms();
-    } catch (err) {
-      setError(normalizeErrorMessage(err, "Failed to remove member"));
-    }
-  };
-
-  const deleteGroup = async () => {
-    if (!activeGroup) {
-      return;
-    }
-    try {
-      await apiDelete<void>(`/chat/groups/${activeGroup.id}`);
-      setShowGroupSettings(false);
-      setActiveGroup(null);
-      setActiveGroupMembers([]);
-      await refreshRooms();
-      setSelectedKey("");
-    } catch (err) {
-      setError(normalizeErrorMessage(err, "Failed to delete group"));
-    }
-  };
-
-  const clearCurrentChatLocal = async () => {
-    if (!selectedRoom) {
-      return;
-    }
+  const clearChat = async () => {
+    if (!selectedRoom) return;
     try {
       await apiPost<{ success: boolean }>(`/chat/clear/${selectedRoom.type}/${selectedRoom.id}`);
-      setMessages([]);
+      messages_.setMessages([]);
     } catch (err) {
       setError(normalizeErrorMessage(err, "Failed to clear chat"));
-    }
-  };
-
-  const loadMedia = async (filter: ChatMediaTypeFilter) => {
-    if (!selectedRoom) {
-      return;
-    }
-    try {
-      setMediaLoading(true);
-      const params = new URLSearchParams({
-        type: selectedRoom.type,
-        id: selectedRoom.id,
-        mediaType: filter,
-      });
-      const data = await apiGet<ChatMessage[]>(`/chat/media?${params.toString()}`);
-      setMediaItems(data);
-    } catch (err) {
-      setError(normalizeErrorMessage(err, "Failed to load media"));
-    } finally {
-      setMediaLoading(false);
-    }
-  };
-
-  const openMediaPanel = async () => {
-    setShowMediaPanel(true);
-    setSelectedMediaIds([]);
-    await loadMedia(mediaFilter);
-  };
-
-  const changeMediaFilter = async (filter: ChatMediaTypeFilter) => {
-    setMediaFilter(filter);
-    await loadMedia(filter);
-  };
-
-  const deleteMedia = async (messageId: string) => {
-    try {
-      setMediaDeletingId(messageId);
-      await apiDelete<{ success: boolean }>(`/chat/media/${messageId}`);
-      setMediaItems((current) => current.filter((item) => item.id !== messageId));
-      setSelectedMediaIds((current) => current.filter((id) => id !== messageId));
-      setMessages((current) =>
-        current.map((item) =>
-          item.id === messageId
-            ? {
-                ...item,
-                isDeleted: true,
-                deletedAt: new Date().toISOString(),
-                content: "This media was deleted",
-                messageType: "TEXT",
-                attachmentUrl: null,
-                attachmentMimeType: null,
-                attachmentFileName: null,
-              }
-            : item
-        )
-      );
-    } catch (err) {
-      setError(normalizeErrorMessage(err, "Failed to delete media"));
-    } finally {
-      setMediaDeletingId(null);
-    }
-  };
-
-  const toggleMediaSelection = (messageId: string) => {
-    setSelectedMediaIds((current) =>
-      current.includes(messageId) ? current.filter((id) => id !== messageId) : [...current, messageId]
-    );
-  };
-
-  const deleteSelectedMedia = async () => {
-    if (!selectedMediaIds.length) {
-      return;
-    }
-    try {
-      setBulkDeletingMedia(true);
-      const payload = await apiPost<{ deletedCount: number; results: Array<{ id: string; success: boolean }> }>(
-        "/chat/media/delete-bulk",
-        { messageIds: selectedMediaIds }
-      );
-      const deletedIds = payload.results.filter((item) => item.success).map((item) => item.id);
-      if (!deletedIds.length) {
-        return;
-      }
-      const deletedSet = new Set(deletedIds);
-      setMediaItems((current) => current.filter((item) => !deletedSet.has(item.id)));
-      setSelectedMediaIds((current) => current.filter((id) => !deletedSet.has(id)));
-      setMessages((current) =>
-        current.map((item) =>
-          deletedSet.has(item.id)
-            ? {
-                ...item,
-                isDeleted: true,
-                deletedAt: new Date().toISOString(),
-                content: "This media was deleted",
-                messageType: "TEXT",
-                attachmentUrl: null,
-                attachmentMimeType: null,
-                attachmentFileName: null,
-              }
-            : item
-        )
-      );
-    } catch (err) {
-      setError(normalizeErrorMessage(err, "Failed to bulk delete media"));
-    } finally {
-      setBulkDeletingMedia(false);
     }
   };
 
@@ -613,487 +108,162 @@ export default function ChatPage() {
     loadingTitle: "Loading chat",
     loadingDescription: "Preparing your CRM conversations.",
   });
-  if (sessionGate) {
-    return sessionGate;
-  }
-
-  if (!user) {
-    return null;
-  }
+  if (sessionGate) return sessionGate;
+  if (!user) return null;
 
   return (
     <CRMShell user={user}>
-      <div className="grid min-h-[calc(100vh-2rem)] gap-4 xl:grid-cols-[360px_1fr]">
+      <div className="grid min-h-[600px] min-w-0 gap-4 overflow-x-hidden xl:h-full xl:min-h-0 xl:grid-cols-[360px_minmax(0,1fr)] xl:overflow-hidden">
+        {/* ── Left: rooms list ── */}
         <section
-          className="rounded-[22px] border p-4"
-          style={{
-            background: "var(--surface)",
-            borderColor: "var(--border)",
-            boxShadow: "var(--shadow-soft)",
-          }}
+          className="rounded-[22px] border p-4 xl:flex xl:min-h-0 xl:flex-col xl:overflow-hidden"
+          style={{ background: "var(--surface)", borderColor: "var(--border)", boxShadow: "var(--shadow-soft)" }}
         >
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-faint)]">
-                Community
-              </p>
-              <h1 className="mt-2 text-2xl font-semibold text-[var(--text-main)]">Team chat</h1>
-            </div>
-            <span
-              className="rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]"
-              style={{
-                background: connected
-                  ? "color-mix(in srgb, var(--success) 14%, var(--surface))"
-                  : "var(--surface-soft)",
-                color: connected ? "var(--success)" : "var(--text-soft)",
-              }}
-            >
-              {connected ? "Live" : "Offline"}
-            </span>
-          </div>
-          {canManageGroups ? (
-            <button
-              type="button"
-              onClick={() => setShowCreateGroup(true)}
-              className="mt-4 w-full rounded-xl border px-4 py-2 text-sm font-semibold"
-              style={{ borderColor: "var(--border)", color: "var(--text-main)" }}
-            >
-              + Create group
-            </button>
-          ) : null}
-
-          <div className="mt-4 grid gap-2 sm:grid-cols-2">
-            {[
-              { label: "Rooms", value: chatAnalytics.totalRooms },
-              { label: "Unread", value: chatAnalytics.unreadTotal },
-              { label: "Visible msgs", value: chatAnalytics.totalMessages },
-              { label: "Media msgs", value: chatAnalytics.attachmentMessages },
-            ].map((item) => (
-              <div
-                key={item.label}
-                className="rounded-xl border px-3 py-2"
-                style={{ borderColor: "var(--border)", background: "var(--surface-soft)" }}
+          <div className="shrink-0">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-faint)]">Community</p>
+                <h1 className="mt-2 text-2xl font-semibold text-[var(--text-main)]">Team chat</h1>
+              </div>
+              <span
+                className="rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]"
+                style={{
+                  background: connected ? "color-mix(in srgb, var(--success) 14%, var(--surface))" : "var(--surface-soft)",
+                  color: connected ? "var(--success)" : "var(--text-soft)",
+                }}
               >
-                <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-faint)]">{item.label}</p>
-                <p className="mt-1 text-sm font-semibold text-[var(--text-main)]">{item.value}</p>
-              </div>
-            ))}
+                {connected ? "Live" : "Offline"}
+              </span>
+            </div>
+            {canManageGroups && (
+              <button
+                type="button"
+                onClick={() => groups_.setShowCreateGroup(true)}
+                className="mt-4 w-full rounded-xl border px-4 py-2 text-sm font-semibold"
+                style={{ borderColor: "var(--border)", color: "var(--text-main)" }}
+              >
+                + Create group
+              </button>
+            )}
+            <div className="mt-4 grid gap-2 sm:grid-cols-2">
+              {[
+                { label: "Rooms", value: chatAnalytics.totalRooms },
+                { label: "Unread", value: chatAnalytics.unreadTotal },
+              ].map((item) => (
+                <div key={item.label} className="rounded-xl border px-3 py-2" style={{ borderColor: "var(--border)", background: "var(--surface-soft)" }}>
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-faint)]">{item.label}</p>
+                  <p className="mt-1 text-sm font-semibold text-[var(--text-main)]">{item.value}</p>
+                </div>
+              ))}
+            </div>
+            {error && <p className="mt-4 rounded-2xl bg-red-500/10 px-4 py-3 text-sm text-red-600">{error}</p>}
           </div>
 
-          {error ? <p className="mt-4 rounded-2xl bg-red-500/10 px-4 py-3 text-sm text-red-600">{error}</p> : null}
-
-          <div className="mt-5 space-y-5">
-            <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--text-faint)]">
-                Departments
-              </p>
-              <div className="space-y-2">
-                {rooms.departments.map((room) => {
-                  const active = roomKey(room) === selectedKey;
-                  return (
-                    <button
-                      key={roomKey(room)}
-                      type="button"
-                      onClick={() => setSelectedKey(roomKey(room))}
-                      className="w-full rounded-2xl border px-4 py-3 text-left transition"
-                      style={{
-                        borderColor: active ? "var(--accent)" : "var(--border)",
-                        background: active ? "color-mix(in srgb, var(--accent) 10%, var(--surface))" : "var(--surface-soft)",
-                      }}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-sm font-semibold text-[var(--text-main)]">{room.name}</p>
-                        {!!room.unreadCount ? (
-                          <span className="rounded-full bg-[var(--accent)] px-2 py-0.5 text-[10px] font-semibold text-white">
-                            {room.unreadCount}
-                          </span>
-                        ) : null}
-                      </div>
-                      <p className="mt-1 truncate text-xs text-[var(--text-soft)]">{room.lastMessagePreview || room.subtitle}</p>
-                    </button>
-                  );
-                })}
-                {!loading && !rooms.departments.length ? (
-                  <p className="rounded-2xl border px-4 py-3 text-sm text-[var(--text-soft)]" style={{ borderColor: "var(--border)" }}>
-                    No department room available.
-                  </p>
-                ) : null}
-              </div>
-            </div>
-
-            <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--text-faint)]">Groups</p>
-              <div className="space-y-2">
-                {rooms.groups.map((room) => {
-                  const active = roomKey(room) === selectedKey;
-                  return (
-                    <button
-                      key={roomKey(room)}
-                      type="button"
-                      onClick={() => setSelectedKey(roomKey(room))}
-                      className="w-full rounded-2xl border px-4 py-3 text-left transition"
-                      style={{
-                        borderColor: active ? "var(--accent)" : "var(--border)",
-                        background: active ? "color-mix(in srgb, var(--accent) 10%, var(--surface))" : "var(--surface-soft)",
-                      }}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-sm font-semibold text-[var(--text-main)]">{room.name}</p>
-                        {!!room.unreadCount ? (
-                          <span className="rounded-full bg-[var(--accent)] px-2 py-0.5 text-[10px] font-semibold text-white">
-                            {room.unreadCount}
-                          </span>
-                        ) : null}
-                      </div>
-                      <p className="mt-1 truncate text-xs text-[var(--text-soft)]">{room.lastMessagePreview || room.subtitle}</p>
-                    </button>
-                  );
-                })}
-                {!loading && !rooms.groups.length ? (
-                  <p className="rounded-2xl border px-4 py-3 text-sm text-[var(--text-soft)]" style={{ borderColor: "var(--border)" }}>
-                    No group room available.
-                  </p>
-                ) : null}
-              </div>
-            </div>
-
-            <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--text-faint)]">
-                Projects
-              </p>
-              <div className="space-y-2">
-                {rooms.projects.map((room) => {
-                  const active = roomKey(room) === selectedKey;
-                  return (
-                    <button
-                      key={roomKey(room)}
-                      type="button"
-                      onClick={() => setSelectedKey(roomKey(room))}
-                      className="w-full rounded-2xl border px-4 py-3 text-left transition"
-                      style={{
-                        borderColor: active ? "var(--accent)" : "var(--border)",
-                        background: active ? "color-mix(in srgb, var(--accent) 10%, var(--surface))" : "var(--surface-soft)",
-                      }}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-sm font-semibold text-[var(--text-main)]">{room.name}</p>
-                        {!!room.unreadCount ? (
-                          <span className="rounded-full bg-[var(--accent)] px-2 py-0.5 text-[10px] font-semibold text-white">
-                            {room.unreadCount}
-                          </span>
-                        ) : null}
-                      </div>
-                      <p className="mt-1 truncate text-xs text-[var(--text-soft)]">{room.lastMessagePreview || room.subtitle}</p>
-                    </button>
-                  );
-                })}
-                {!loading && !rooms.projects.length ? (
-                  <p className="rounded-2xl border px-4 py-3 text-sm text-[var(--text-soft)]" style={{ borderColor: "var(--border)" }}>
-                    No project room available.
-                  </p>
-                ) : null}
-              </div>
-            </div>
+          <div className="mt-5 xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:pr-1">
+            <ChatRoomList
+              rooms={rooms}
+              selectedKey={selectedKey}
+              loading={loading}
+              onSelect={setSelectedKey}
+            />
           </div>
         </section>
 
+        {/* ── Right: chat panel ── */}
         <section
-          className="flex min-h-[680px] flex-col overflow-hidden rounded-[22px] border"
-          style={{
-            background: "var(--surface)",
-            borderColor: "var(--border)",
-            boxShadow: "var(--shadow-soft)",
-          }}
+          className="flex min-h-[500px] flex-col overflow-hidden rounded-[22px] border xl:min-h-0"
+          style={{ background: "var(--surface)", borderColor: "var(--border)", boxShadow: "var(--shadow-soft)" }}
         >
           {selectedRoom ? (
             <>
-              <div className="border-b px-5 py-4" style={{ borderColor: "var(--border)" }}>
+              <div className="shrink-0 border-b px-5 py-4" style={{ borderColor: "var(--border)" }}>
                 <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-faint)]">
-                  {selectedRoom.type === "DEPARTMENT"
-                    ? "Department room"
-                    : selectedRoom.type === "PROJECT"
-                      ? "Project room"
-                      : "Group room"}
+                  {selectedRoom.type === "DEPARTMENT" ? "Department room" : selectedRoom.type === "PROJECT" ? "Project room" : "Group room"}
                 </p>
                 <h2 className="mt-1 text-2xl font-semibold text-[var(--text-main)]">{selectedRoom.name}</h2>
                 <p className="mt-1 text-sm text-[var(--text-soft)]">{selectedRoom.subtitle}</p>
                 <input
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
+                  value={messages_.search}
+                  onChange={(e) => messages_.setSearch(e.target.value)}
                   placeholder="Search messages..."
                   className="mt-3 w-full rounded-xl border px-3 py-2 text-sm outline-none"
                   style={{ borderColor: "var(--border)", background: "var(--surface-soft)", color: "var(--text-main)" }}
                 />
-                <div className="mt-3 flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => void openMediaPanel()}
-                    className="rounded-lg border px-3 py-1.5 text-xs font-semibold"
-                    style={{ borderColor: "var(--border)", color: "var(--text-main)" }}
-                  >
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button type="button" onClick={() => void media_.openMediaPanel()} className="rounded-lg border px-3 py-1.5 text-xs font-semibold" style={{ borderColor: "var(--border)", color: "var(--text-main)" }}>
                     Media
                   </button>
-                  {canClearChat ? (
-                    <button
-                      type="button"
-                      onClick={() => void clearCurrentChatLocal()}
-                      className="rounded-lg border px-3 py-1.5 text-xs font-semibold"
-                      style={{ borderColor: "var(--border)", color: "var(--text-main)" }}
-                    >
+                  {canClearChat && (
+                    <button type="button" onClick={() => void clearChat()} className="rounded-lg border px-3 py-1.5 text-xs font-semibold" style={{ borderColor: "var(--border)", color: "var(--text-main)" }}>
                       Clear chat (local)
                     </button>
-                  ) : null}
-                  {selectedRoom.type === "GROUP" && canManageGroups ? (
-                    <button
-                      type="button"
-                      onClick={() => void openGroupSettings()}
-                      className="rounded-lg border px-3 py-1.5 text-xs font-semibold"
-                      style={{ borderColor: "var(--border)", color: "var(--text-main)" }}
-                    >
+                  )}
+                  {selectedRoom.type === "GROUP" && canManageGroups && (
+                    <button type="button" onClick={() => void groups_.openGroupSettings(selectedRoom)} className="rounded-lg border px-3 py-1.5 text-xs font-semibold" style={{ borderColor: "var(--border)", color: "var(--text-main)" }}>
                       Group settings
                     </button>
-                  ) : null}
+                  )}
                 </div>
               </div>
 
               <div className="flex-1 space-y-3 overflow-y-auto p-5">
-                {!messagesLoading && hasMoreMessages ? (
+                {!messages_.messagesLoading && messages_.hasMoreMessages && (
                   <div className="mb-2 flex justify-center">
-                    <button
-                      type="button"
-                      onClick={() => void loadOlderMessages()}
-                      disabled={loadingOlderMessages}
-                      className="rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-60"
-                      style={{ borderColor: "var(--border)", color: "var(--text-main)", background: "var(--surface-soft)" }}
-                    >
-                      {loadingOlderMessages ? "Loading..." : "Load older messages"}
+                    <button type="button" onClick={() => void messages_.loadOlderMessages()} disabled={messages_.loadingOlderMessages} className="rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-60" style={{ borderColor: "var(--border)", color: "var(--text-main)", background: "var(--surface-soft)" }}>
+                      {messages_.loadingOlderMessages ? "Loading..." : "Load older messages"}
                     </button>
                   </div>
-                ) : null}
-                {messagesLoading ? (
-                  <StatePanel title="Loading messages" description="Fetching the latest conversation." />
-                ) : null}
-
-                {!messagesLoading && !messages.length ? (
+                )}
+                {messages_.messagesLoading && <StatePanel title="Loading messages" description="Fetching the latest conversation." />}
+                {!messages_.messagesLoading && !messages_.messages.length && (
                   <div className="flex h-full items-center justify-center">
-                    <p className="max-w-sm text-center text-sm text-[var(--text-soft)]">
-                      No messages yet. Start the conversation for this room.
-                    </p>
+                    <p className="max-w-sm text-center text-sm text-[var(--text-soft)]">No messages yet. Start the conversation for this room.</p>
                   </div>
-                ) : null}
-
-                {filteredMessages.map((message) => {
-                  const own = message.author.id === user.id;
-                  const canDelete = own || user.role === "ADMIN" || user.role === "SUPERADMIN";
-                  return (
-                    <article key={message.id} className={`flex items-end gap-2 ${own ? "justify-end" : "justify-start"}`}>
-                      {!own ? (
-                        <div
-                          className="mb-1 flex h-8 w-8 items-center justify-center rounded-full text-[10px] font-bold text-white"
-                          style={{ background: "var(--accent)" }}
-                        >
-                          {initials(message.author.name)}
-                        </div>
-                      ) : null}
-                      <div
-                        className="relative max-w-[760px] rounded-2xl border px-4 py-3"
-                        style={{
-                          borderColor: own ? "color-mix(in srgb, var(--accent) 45%, var(--border))" : "var(--border)",
-                          background: own ? "color-mix(in srgb, var(--accent) 12%, var(--surface))" : "var(--surface-soft)",
-                        }}
-                      >
-                        <div className="mb-1 flex flex-wrap items-center gap-2 pr-8">
-                          <p className="text-sm font-semibold text-[var(--text-main)]">{message.author.name}</p>
-                          <span className="text-xs text-[var(--text-faint)]">{message.author.role}</span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setOpenMenuId((current) => (current === message.id ? null : message.id));
-                          }}
-                          className="absolute right-2 top-2 rounded-md px-2 py-0.5 text-sm text-[var(--text-soft)] hover:bg-black/5"
-                        >
-                          ...
-                        </button>
-                        {openMenuId === message.id ? (
-                          <div
-                            className="absolute right-2 top-9 z-20 min-w-40 rounded-xl border p-1 shadow-lg"
-                            style={{ borderColor: "var(--border)", background: "var(--surface)" }}
-                            onClick={(event) => event.stopPropagation()}
-                          >
-                            {!message.isDeleted ? (
-                              <button
-                                type="button"
-                                className="block w-full rounded-lg px-3 py-2 text-left text-sm"
-                                style={{ color: "var(--text-main)" }}
-                                onClick={() => {
-                                  setReplyTo(message);
-                                  setOpenMenuId(null);
-                                }}
-                              >
-                                Reply
-                              </button>
-                            ) : null}
-                            {canDelete && !message.isDeleted ? (
-                              <button
-                                type="button"
-                                className="block w-full rounded-lg px-3 py-2 text-left text-sm"
-                                style={{ color: "var(--text-main)" }}
-                                onClick={() => {
-                                  void deleteMessageWithMode(message.id, "me");
-                                  setOpenMenuId(null);
-                                }}
-                              >
-                                Delete for me
-                              </button>
-                            ) : null}
-                            {canDelete && !message.isDeleted ? (
-                              <button
-                                type="button"
-                                className="block w-full rounded-lg px-3 py-2 text-left text-sm"
-                                style={{ color: "var(--danger)" }}
-                                onClick={() => {
-                                  void deleteMessage(message.id);
-                                  setOpenMenuId(null);
-                                }}
-                              >
-                                Delete for everyone
-                              </button>
-                            ) : null}
-                          </div>
-                        ) : null}
-                        {message.replyTo ? (
-                          <div className="mb-2 rounded-lg border-l-2 px-3 py-2 text-xs" style={{ borderColor: "var(--accent)", background: "var(--surface)" }}>
-                            <p className="font-semibold text-[var(--text-main)]">{message.replyTo.author.name}</p>
-                            <p className="text-[var(--text-soft)]">
-                              {message.replyTo.isDeleted
-                                ? "This message was deleted"
-                                : message.replyTo.messageType === "TEXT"
-                                  ? message.replyTo.content
-                                  : message.replyTo.messageType === "PDF"
-                                    ? message.replyTo.attachmentFileName || "PDF attachment"
-                                    : "Image attachment"}
-                            </p>
-                          </div>
-                        ) : null}
-                        <p className="whitespace-pre-wrap break-words text-sm leading-6 text-[var(--text-main)]">
-                          {message.content}
-                        </p>
-                        {message.messageType === "TEXT" ? (
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {extractUrls(message.content).map((url) => (
-                              <a
-                                key={`${message.id}-${url}`}
-                                href={url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="rounded-xl border px-3 py-1.5 text-xs font-semibold"
-                                style={{ borderColor: "var(--border)", background: "var(--surface)", color: "var(--text-main)" }}
-                              >
-                                {getUrlLabel(url)}
-                              </a>
-                            ))}
-                          </div>
-                        ) : null}
-                        {message.attachmentUrl && !message.isDeleted ? (
-                          <div className="mt-3">
-                            {message.messageType === "PDF" ? (
-                              <a
-                                href={resolveAttachmentUrl(message.attachmentUrl)}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex rounded-xl border px-3 py-2 text-sm font-medium text-[var(--text-main)]"
-                                style={{ borderColor: "var(--border)", background: "var(--surface)" }}
-                              >
-                                {message.attachmentFileName || "Open PDF"}
-                              </a>
-                            ) : (
-                              <img
-                                src={resolveAttachmentUrl(message.attachmentUrl)}
-                                alt={message.attachmentFileName || "Attachment"}
-                                className={`rounded-xl border object-cover ${
-                                  message.messageType === "STICKER" ? "max-h-40 max-w-40" : "max-h-72 max-w-full"
-                                }`}
-                                style={{ borderColor: "var(--border)", background: "var(--surface)" }}
-                              />
-                            )}
-                          </div>
-                        ) : null}
-                        <div className="mt-2 text-right text-xs text-[var(--text-faint)]">{formatTime(message.createdAt)}</div>
-                      </div>
-                    </article>
-                  );
-                })}
-                <div ref={messageEndRef} />
+                )}
+                {messages_.filteredMessages.map((message) => (
+                  <ChatMessageBubble
+                    key={message.id}
+                    message={message}
+                    user={user}
+                    openMenuId={messages_.openMenuId}
+                    onOpenMenu={messages_.setOpenMenuId}
+                    onReply={messages_.setReplyTo}
+                    onDeleteForMe={(id) => void messages_.deleteMessage(id, "me")}
+                    onDeleteForEveryone={(id) => void messages_.deleteMessage(id, "everyone")}
+                  />
+                ))}
+                <div ref={messages_.messageEndRef} />
               </div>
 
-              <div className="border-t p-4" style={{ borderColor: "var(--border)" }}>
-                {replyTo ? (
+              <div className="shrink-0 border-t p-4" style={{ borderColor: "var(--border)" }}>
+                {messages_.replyTo && (
                   <div className="mb-3 flex items-center justify-between rounded-xl border px-3 py-2 text-sm" style={{ borderColor: "var(--border)" }}>
                     <div>
-                      <p className="font-semibold text-[var(--text-main)]">Replying to {replyTo.author.name}</p>
-                      <p className="text-[var(--text-soft)]">
-                        {replyTo.isDeleted ? "This message was deleted" : replyTo.content || replyTo.attachmentFileName || "Attachment"}
-                      </p>
+                      <p className="font-semibold text-[var(--text-main)]">Replying to {messages_.replyTo.author.name}</p>
+                      <p className="text-[var(--text-soft)]">{messages_.replyTo.isDeleted ? "This message was deleted" : messages_.replyTo.content || messages_.replyTo.attachmentFileName || "Attachment"}</p>
                     </div>
-                    <button type="button" className="text-[var(--text-soft)]" onClick={() => setReplyTo(null)}>
-                      Cancel
-                    </button>
+                    <button type="button" className="text-[var(--text-soft)]" onClick={() => messages_.setReplyTo(null)}>Cancel</button>
                   </div>
-                ) : null}
-                {selectedFile ? (
+                )}
+                {messages_.selectedFile && (
                   <div className="mb-3 flex items-center justify-between rounded-xl border px-3 py-2 text-sm" style={{ borderColor: "var(--border)" }}>
-                    <p className="truncate text-[var(--text-main)]">Attached: {selectedFile.name}</p>
-                    <button type="button" className="text-[var(--text-soft)]" onClick={() => setSelectedFile(null)}>
-                      Remove
-                    </button>
+                    <p className="truncate text-[var(--text-main)]">Attached: {messages_.selectedFile.name}</p>
+                    <button type="button" className="text-[var(--text-soft)]" onClick={() => messages_.setSelectedFile(null)}>Remove</button>
                   </div>
-                ) : null}
+                )}
                 <div className="flex items-center gap-3">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*,application/pdf"
-                    className="hidden"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0] ?? null;
-                      setSelectedFile(file);
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="h-11 w-11 rounded-full border text-2xl leading-none"
-                    style={{ borderColor: "var(--border)", color: "var(--text-main)", background: "var(--surface-soft)" }}
-                  >
-                    +
-                  </button>
+                  <input ref={messages_.fileInputRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => messages_.setSelectedFile(e.target.files?.[0] ?? null)} />
+                  <button type="button" onClick={() => messages_.fileInputRef.current?.click()} className="h-11 w-11 rounded-full border text-2xl leading-none" style={{ borderColor: "var(--border)", color: "var(--text-main)", background: "var(--surface-soft)" }}>+</button>
                   <textarea
                     value={draft}
-                    onChange={(event) => setDraft(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" && !event.shiftKey) {
-                        event.preventDefault();
-                        void sendMessage();
-                      }
-                    }}
+                    onChange={(e) => setDraft(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void messages_.sendMessage(draft, () => setDraft("")); } }}
                     placeholder="Write a message..."
                     className="min-h-12 flex-1 resize-none rounded-full border px-5 py-3 text-sm outline-none"
-                    style={{
-                      borderColor: "var(--border)",
-                      background: "var(--surface-soft)",
-                      color: "var(--text-main)",
-                    }}
+                    style={{ borderColor: "var(--border)", background: "var(--surface-soft)", color: "var(--text-main)" }}
                   />
-                  <button
-                    type="button"
-                    onClick={() => void sendMessage()}
-                    disabled={sending || (!draft.trim() && !selectedFile)}
-                    className="h-11 rounded-full px-5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-                    style={{ background: "var(--accent)" }}
-                  >
-                    {sending ? "Sending..." : "Send"}
+                  <button type="button" onClick={() => void messages_.sendMessage(draft, () => setDraft(""))} disabled={messages_.sending || (!draft.trim() && !messages_.selectedFile)} className="h-11 rounded-full px-5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60" style={{ background: "var(--accent)" }}>
+                    {messages_.sending ? "Sending..." : "Send"}
                   </button>
                 </div>
               </div>
@@ -1105,196 +275,55 @@ export default function ChatPage() {
           )}
         </section>
       </div>
-      {showCreateGroup ? (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/35 p-4">
-          <div className="w-full max-w-xl rounded-2xl border p-4" style={{ background: "var(--surface)", borderColor: "var(--border)" }}>
-            <h3 className="text-lg font-semibold text-[var(--text-main)]">Create group</h3>
-            <input value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="Group name" className="mt-3 w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: "var(--border)" }} />
-            <input value={groupDescription} onChange={(e) => setGroupDescription(e.target.value)} placeholder="Description (optional)" className="mt-2 w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: "var(--border)" }} />
-            <div className="mt-3 max-h-48 overflow-y-auto rounded-xl border p-2" style={{ borderColor: "var(--border)" }}>
-              {users.map((member) => (
-                <label key={member.id} className="flex items-center gap-2 px-2 py-1 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={groupMemberIds.includes(member.id)}
-                    onChange={(e) =>
-                      setGroupMemberIds((current) =>
-                        e.target.checked ? [...current, member.id] : current.filter((id) => id !== member.id)
-                      )
-                    }
-                  />
-                  <span>{member.name} ({member.role})</span>
-                </label>
-              ))}
-            </div>
-            <div className="mt-4 flex justify-end gap-2">
-              <button type="button" onClick={() => setShowCreateGroup(false)} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: "var(--border)" }}>Cancel</button>
-              <button type="button" disabled={groupSaving || !groupName.trim()} onClick={() => void createGroup()} className="rounded-lg px-3 py-2 text-sm font-semibold text-white" style={{ background: "var(--accent)" }}>
-                {groupSaving ? "Creating..." : "Create"}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-      {showGroupSettings && activeGroup ? (
-        <div className="fixed inset-0 z-40 flex justify-end bg-black/30">
-          <div className="h-full w-full max-w-md overflow-y-auto border-l p-4" style={{ background: "var(--surface)", borderColor: "var(--border)" }}>
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-[var(--text-main)]">Group settings</h3>
-              <button type="button" onClick={() => setShowGroupSettings(false)} className="text-sm">Close</button>
-            </div>
-            <input
-              value={activeGroup.name}
-              onChange={(e) => setActiveGroup((current) => (current ? { ...current, name: e.target.value } : current))}
-              className="mt-3 w-full rounded-xl border px-3 py-2 text-sm"
-              style={{ borderColor: "var(--border)" }}
-            />
-            <textarea
-              value={activeGroup.description || ""}
-              onChange={(e) => setActiveGroup((current) => (current ? { ...current, description: e.target.value } : current))}
-              className="mt-2 min-h-20 w-full rounded-xl border px-3 py-2 text-sm"
-              style={{ borderColor: "var(--border)" }}
-            />
-            <button type="button" onClick={() => void updateGroup()} className="mt-2 rounded-lg px-3 py-2 text-sm font-semibold text-white" style={{ background: "var(--accent)" }}>
-              Save group
-            </button>
-            <div className="mt-4">
-              <p className="text-sm font-semibold text-[var(--text-main)]">Members</p>
-              <div className="mt-2 space-y-2">
-                {activeGroupMembers.map((member) => (
-                  <div key={member.id} className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm" style={{ borderColor: "var(--border)" }}>
-                    <span>{member.user.name} ({member.user.role})</span>
-                    <button type="button" onClick={() => void removeMemberFromGroup(member.userId)} className="text-red-600">Remove</button>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-3 max-h-44 overflow-y-auto rounded-xl border p-2" style={{ borderColor: "var(--border)" }}>
-                {users
-                  .filter((u) => !activeGroupMembers.some((m) => m.userId === u.id))
-                  .map((u) => (
-                    <button
-                      key={u.id}
-                      type="button"
-                      onClick={() => void addMembersToGroup([u.id])}
-                      className="block w-full rounded-lg px-2 py-1 text-left text-sm hover:bg-[var(--surface-soft)]"
-                    >
-                      Add {u.name} ({u.role})
-                    </button>
-                  ))}
-              </div>
-            </div>
-            <button type="button" onClick={() => void deleteGroup()} className="mt-6 rounded-lg border px-3 py-2 text-sm text-red-600" style={{ borderColor: "color-mix(in srgb, red 30%, var(--border))" }}>
-              Delete group
-            </button>
-          </div>
-        </div>
-      ) : null}
-      {showMediaPanel && selectedRoom ? (
-        <div className="fixed inset-0 z-40 flex justify-end bg-black/30">
-          <div className="h-full w-full max-w-md overflow-y-auto border-l p-4" style={{ background: "var(--surface)", borderColor: "var(--border)" }}>
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-[var(--text-main)]">Media</h3>
-              <button type="button" onClick={() => setShowMediaPanel(false)} className="text-sm">Close</button>
-            </div>
-            <p className="mt-1 text-sm text-[var(--text-soft)]">{selectedRoom.name}</p>
-            <div className="mt-3 flex gap-2">
-              {(["ALL", "IMAGE", "PDF"] as ChatMediaTypeFilter[]).map((filter) => (
-                <button
-                  key={filter}
-                  type="button"
-                  onClick={() => void changeMediaFilter(filter)}
-                  className="rounded-full border px-3 py-1 text-xs font-semibold"
-                  style={{
-                    borderColor: mediaFilter === filter ? "var(--accent)" : "var(--border)",
-                    color: mediaFilter === filter ? "var(--accent)" : "var(--text-main)",
-                  }}
-                >
-                  {filter === "ALL" ? "All" : filter === "IMAGE" ? "Images" : "PDFs"}
-                </button>
-              ))}
-            </div>
-            <div className="mt-3 flex items-center justify-between">
-              <p className="text-xs text-[var(--text-soft)]">{selectedMediaIds.length} selected</p>
-              <button
-                type="button"
-                onClick={() => void deleteSelectedMedia()}
-                disabled={!selectedMediaIds.length || bulkDeletingMedia}
-                className="rounded-lg border px-3 py-1 text-xs font-semibold text-red-600 disabled:opacity-60"
-                style={{ borderColor: "color-mix(in srgb, red 30%, var(--border))" }}
-              >
-                {bulkDeletingMedia ? "Deleting..." : "Delete selected"}
-              </button>
-            </div>
-            <div className="mt-4 space-y-3">
-              {mediaLoading ? <p className="text-sm text-[var(--text-soft)]">Loading media...</p> : null}
-              {!mediaLoading && !mediaItems.length ? (
-                <p className="rounded-xl border px-3 py-2 text-sm text-[var(--text-soft)]" style={{ borderColor: "var(--border)" }}>
-                  No media found in this chat.
-                </p>
-              ) : null}
-              {mediaItems.map((item) => {
-                const canDeleteMedia = item.author.id === user.id || user.role === "ADMIN" || user.role === "SUPERADMIN";
-                return (
-                  <div key={item.id} className="rounded-xl border p-3" style={{ borderColor: "var(--border)" }}>
-                    <label className="mb-2 flex cursor-pointer items-center gap-2 text-xs text-[var(--text-soft)]">
-                      <input
-                        type="checkbox"
-                        checked={selectedMediaIds.includes(item.id)}
-                        onChange={() => toggleMediaSelection(item.id)}
-                      />
-                      Select
-                    </label>
-                    <div className="mb-2 flex items-center justify-between text-xs text-[var(--text-soft)]">
-                      <span>{item.author.name}</span>
-                      <span>{formatTime(item.createdAt)}</span>
-                    </div>
-                    {item.messageType === "PDF" ? (
-                      <a
-                        href={resolveAttachmentUrl(item.attachmentUrl)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex rounded-lg border px-3 py-2 text-sm font-medium text-[var(--text-main)]"
-                        style={{ borderColor: "var(--border)", background: "var(--surface-soft)" }}
-                      >
-                        {item.attachmentFileName || "Open PDF"}
-                      </a>
-                    ) : (
-                      <img
-                        src={resolveAttachmentUrl(item.attachmentUrl)}
-                        alt={item.attachmentFileName || "Attachment"}
-                        className="max-h-52 w-full rounded-lg border object-cover"
-                        style={{ borderColor: "var(--border)", background: "var(--surface-soft)" }}
-                      />
-                    )}
-                    <div className="mt-2 flex gap-2">
-                      <a
-                        href={resolveAttachmentUrl(item.attachmentUrl)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="rounded-lg border px-2 py-1 text-xs font-semibold"
-                        style={{ borderColor: "var(--border)", color: "var(--text-main)" }}
-                      >
-                        Open
-                      </a>
-                      {canDeleteMedia ? (
-                        <button
-                          type="button"
-                          onClick={() => void deleteMedia(item.id)}
-                          disabled={mediaDeletingId === item.id}
-                          className="rounded-lg border px-2 py-1 text-xs font-semibold text-red-600 disabled:opacity-60"
-                          style={{ borderColor: "color-mix(in srgb, red 30%, var(--border))" }}
-                        >
-                          {mediaDeletingId === item.id ? "Deleting..." : "Delete"}
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      ) : null}
+
+      {groups_.showCreateGroup && (
+        <CreateGroupModal
+          groupName={groups_.groupName}
+          groupDescription={groups_.groupDescription}
+          groupMemberIds={groups_.groupMemberIds}
+          users={users}
+          saving={groups_.groupSaving}
+          onClose={() => groups_.setShowCreateGroup(false)}
+          onChangeName={groups_.setGroupName}
+          onChangeDesc={groups_.setGroupDescription}
+          onToggleMember={(id, checked) =>
+            groups_.setGroupMemberIds((c) => (checked ? [...c, id] : c.filter((x) => x !== id)))
+          }
+          onSubmit={() => void groups_.createGroup()}
+        />
+      )}
+      {groups_.showGroupSettings && groups_.activeGroup && (
+        <GroupSettingsDrawer
+          activeGroup={groups_.activeGroup}
+          members={groups_.activeGroupMembers}
+          allUsers={users}
+          saving={groups_.groupSaving}
+          onClose={() => groups_.setShowGroupSettings(false)}
+          onChangeName={(v) => groups_.setActiveGroup((g) => (g ? { ...g, name: v } : g))}
+          onChangeDesc={(v) => groups_.setActiveGroup((g) => (g ? { ...g, description: v } : g))}
+          onSave={() => void groups_.updateGroup()}
+          onRemoveMember={(id) => void groups_.removeMember(id)}
+          onAddMember={(id) => void groups_.addMembers([id])}
+          onDelete={() => void groups_.deleteGroup(setSelectedKey)}
+        />
+      )}
+      {media_.showMediaPanel && selectedRoom && (
+        <MediaPanelDrawer
+          room={selectedRoom}
+          user={user}
+          mediaFilter={media_.mediaFilter}
+          mediaItems={media_.mediaItems}
+          mediaLoading={media_.mediaLoading}
+          mediaDeletingId={media_.mediaDeletingId}
+          selectedMediaIds={media_.selectedMediaIds}
+          bulkDeleting={media_.bulkDeletingMedia}
+          onClose={() => media_.setShowMediaPanel(false)}
+          onChangeFilter={(f) => void media_.changeMediaFilter(f)}
+          onToggleSelect={media_.toggleMediaSelection}
+          onDeleteOne={(id) => void media_.deleteMedia(id)}
+          onDeleteSelected={() => void media_.deleteSelectedMedia()}
+        />
+      )}
     </CRMShell>
   );
 }

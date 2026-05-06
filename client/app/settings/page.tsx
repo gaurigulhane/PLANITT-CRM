@@ -102,7 +102,7 @@ export default function SettingsPage() {
 
   return (
     <CRMShell user={user}>
-      <div className="space-y-4">
+      <div className="min-w-0 space-y-4 overflow-x-hidden pb-4">
         <div
           className="inline-flex rounded-2xl border p-1"
           style={{ borderColor: "var(--border)", background: "var(--surface-soft)" }}

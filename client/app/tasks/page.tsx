@@ -195,7 +195,7 @@ function TasksPageContent() {
 
   return (
     <CRMShell user={user}>
-      <div className="space-y-4">
+      <div className="min-w-0 space-y-4 overflow-x-hidden pb-4">
         <Surface>
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-faint)]">
             Task workspace
