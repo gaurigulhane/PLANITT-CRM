@@ -31,10 +31,7 @@ export function ChatMessageBubble({
   const own = message.author.id === user.id;
   const canDelete = own || user.role === "ADMIN" || user.role === "SUPERADMIN";
   const attachmentUrl = resolveAttachmentUrl(message.attachmentUrl);
-  const pdfUrl =
-    message.messageType === "PDF"
-      ? attachmentUrl.replace("/image/upload/", "/raw/upload/")
-      : attachmentUrl;
+  const pdfUrl = attachmentUrl;
 
   return (
     <article className={`flex items-end gap-2 ${own ? "justify-end" : "justify-start"}`}>
