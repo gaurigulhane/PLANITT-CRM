@@ -30,6 +30,11 @@ export function ChatMessageBubble({
 }: Props) {
   const own = message.author.id === user.id;
   const canDelete = own || user.role === "ADMIN" || user.role === "SUPERADMIN";
+  const attachmentUrl = resolveAttachmentUrl(message.attachmentUrl);
+  const pdfUrl =
+    message.messageType === "PDF"
+      ? attachmentUrl.replace("/image/upload/", "/raw/upload/")
+      : attachmentUrl;
 
   return (
     <article className={`flex items-end gap-2 ${own ? "justify-end" : "justify-start"}`}>
@@ -153,18 +158,28 @@ export function ChatMessageBubble({
         {message.attachmentUrl && !message.isDeleted && (
           <div className="mt-3">
             {message.messageType === "PDF" ? (
-              <a
-                href={resolveAttachmentUrl(message.attachmentUrl)}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex rounded-xl border px-3 py-2 text-sm font-medium text-[var(--text-main)]"
-                style={{ borderColor: "var(--border)", background: "var(--surface)" }}
-              >
-                {message.attachmentFileName || "Open PDF"}
-              </a>
+              <div className="flex flex-wrap items-center gap-2">
+                <a
+                  href={pdfUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex rounded-xl border px-3 py-2 text-sm font-medium text-[var(--text-main)]"
+                  style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+                >
+                  {message.attachmentFileName || "Open PDF"}
+                </a>
+                <a
+                  href={pdfUrl}
+                  download={message.attachmentFileName || "chat-attachment.pdf"}
+                  className="inline-flex rounded-xl border px-3 py-2 text-sm font-medium text-[var(--text-main)]"
+                  style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+                >
+                  Download
+                </a>
+              </div>
             ) : (
               <img
-                src={resolveAttachmentUrl(message.attachmentUrl)}
+                src={attachmentUrl}
                 alt={message.attachmentFileName || "Attachment"}
                 className={`rounded-xl border object-cover ${
                   message.messageType === "STICKER" ? "max-h-40 max-w-40" : "max-h-72 max-w-full"
