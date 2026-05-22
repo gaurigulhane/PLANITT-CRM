@@ -490,7 +490,7 @@ Useful Prisma commands from `server/`:
 
 ```bash
 npx prisma generate
-npx prisma migrate dev
+npx prisma migrate dev 
 npx prisma migrate deploy
 npx prisma studio
 ```
