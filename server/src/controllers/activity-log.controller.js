@@ -91,6 +91,12 @@ export async function getActivityLogs(req, res) {
       nextOffset: offset + items.length,
     });
   } catch (err) {
+    const prismaCode = typeof err?.code === "string" ? err.code : "";
+    if (prismaCode === "P2021") {
+      return res.status(503).json({
+        error: "Activity logs are not ready yet. Database migration is pending on server.",
+      });
+    }
     return sendSafeError(res, err, "Unable to fetch activity logs");
   }
 }

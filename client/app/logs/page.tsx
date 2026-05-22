@@ -68,6 +68,14 @@ export default function LogsPage() {
     void loadLogs(0);
   }, [user]);
 
+  const statusSummary = useMemo(() => {
+    const logs = data?.items ?? [];
+    const ok = logs.filter((item) => item.statusCode >= 200 && item.statusCode < 300).length;
+    const warnings = logs.filter((item) => item.statusCode >= 400 && item.statusCode < 500).length;
+    const failures = logs.filter((item) => item.statusCode >= 500).length;
+    return { ok, warnings, failures };
+  }, [data?.items]);
+
   const sessionGate = renderSessionGate({
     loading: sessionLoading,
     user,
@@ -78,14 +86,6 @@ export default function LogsPage() {
   });
   if (sessionGate) return sessionGate;
   if (!user) return null;
-
-  const statusSummary = useMemo(() => {
-    const logs = data?.items ?? [];
-    const ok = logs.filter((item) => item.statusCode >= 200 && item.statusCode < 300).length;
-    const warnings = logs.filter((item) => item.statusCode >= 400 && item.statusCode < 500).length;
-    const failures = logs.filter((item) => item.statusCode >= 500).length;
-    return { ok, warnings, failures };
-  }, [data?.items]);
 
   return (
     <CRMShell user={user}>
