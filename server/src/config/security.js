@@ -5,7 +5,9 @@ export function normalizeOrigin(origin) {
 
 const DEFAULT_LOCAL_ORIGINS = [
   "http://localhost:3000",
+  "http://localhost:3001",
   "http://127.0.0.1:3000",
+  "http://127.0.0.1:3001",
   "https://planitt-crm-client.vercel.app",
 ].map((o) => normalizeOrigin(o));
 
