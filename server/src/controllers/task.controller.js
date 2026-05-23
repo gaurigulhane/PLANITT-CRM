@@ -93,7 +93,11 @@ async function getCurrentUserDepartmentId(userId) {
   return user?.departmentId ?? null;
 }
 
-function getDepartmentScopedTaskWhere(departmentId, userId) {
+function getDepartmentScopedTaskWhere(departmentId, userId, role) {
+  if (!departmentId && isLeadership(role)) {
+    return {};
+  }
+
   if (!departmentId) {
     return {
       OR: [{ assignedById: userId }, { assignments: { some: { userId } } }],
@@ -110,7 +114,11 @@ function getDepartmentScopedTaskWhere(departmentId, userId) {
   };
 }
 
-function canAccessTaskByDepartment(task, departmentId, userId) {
+function canAccessTaskByDepartment(task, departmentId, userId, role) {
+  if (!departmentId && isLeadership(role)) {
+    return true;
+  }
+
   if (task.assignedById === userId) {
     return true;
   }
@@ -299,7 +307,8 @@ export async function getTasks(_req, res) {
       ? {}
       : getDepartmentScopedTaskWhere(
           await getCurrentUserDepartmentId(_req.user.userId),
-          _req.user.userId
+          _req.user.userId,
+          _req.user.role
         );
     const where = {
       ...roleWhere,
@@ -391,7 +400,7 @@ export async function updateTaskStatus(req, res) {
 
     if (!isSuperAdmin(req.user.role)) {
       const departmentId = await getCurrentUserDepartmentId(req.user.userId);
-      if (!canAccessTaskByDepartment(existingTask, departmentId, req.user.userId)) {
+      if (!canAccessTaskByDepartment(existingTask, departmentId, req.user.userId, req.user.role)) {
         return res.status(403).json({ error: "You are not allowed to access this task" });
       }
     }
@@ -591,7 +600,7 @@ export async function deleteTask(req, res) {
 
     if (!isSuperAdmin(req.user.role)) {
       const departmentId = await getCurrentUserDepartmentId(req.user.userId);
-      if (!canAccessTaskByDepartment(existingTask, departmentId, req.user.userId)) {
+      if (!canAccessTaskByDepartment(existingTask, departmentId, req.user.userId, req.user.role)) {
         return res.status(403).json({ error: "You are not allowed to access this task" });
       }
     }
@@ -653,7 +662,7 @@ export async function toggleChecklistItem(req, res) {
 
     if (!isSuperAdmin(req.user.role)) {
       const departmentId = await getCurrentUserDepartmentId(req.user.userId);
-      if (!canAccessTaskByDepartment(item.task, departmentId, req.user.userId)) {
+      if (!canAccessTaskByDepartment(item.task, departmentId, req.user.userId, req.user.role)) {
         return res.status(403).json({ error: "You are not allowed to access this task" });
       }
     }
@@ -733,7 +742,7 @@ export async function createTaskIssue(req, res) {
 
     if (!isSuperAdmin(req.user.role)) {
       const departmentId = await getCurrentUserDepartmentId(req.user.userId);
-      if (!canAccessTaskByDepartment(task, departmentId, req.user.userId)) {
+      if (!canAccessTaskByDepartment(task, departmentId, req.user.userId, req.user.role)) {
         return res.status(403).json({ error: "You are not allowed to access this task" });
       }
     }
@@ -853,7 +862,7 @@ export async function respondToTaskIssue(req, res) {
 
     if (!isSuperAdmin(req.user.role)) {
       const departmentId = await getCurrentUserDepartmentId(req.user.userId);
-      if (!canAccessTaskByDepartment(issue.task, departmentId, req.user.userId)) {
+      if (!canAccessTaskByDepartment(issue.task, departmentId, req.user.userId, req.user.role)) {
         return res.status(403).json({ error: "You are not allowed to access this task" });
       }
     }
