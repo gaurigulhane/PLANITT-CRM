@@ -52,7 +52,13 @@ function initials(name: string) {
 
 function CRMShellHeaderSearch() {
   const { globalSearch, setGlobalSearch , submitSearch ,searchNoResult ,setSearchNoResult} = useCrmSearch();
-    const router = useRouter();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!searchNoResult) return;
+    const timer = window.setTimeout(() => setSearchNoResult(false), 2200);
+    return () => window.clearTimeout(timer);
+  }, [searchNoResult, setSearchNoResult]);
   
 
   return (
@@ -65,9 +71,12 @@ function CRMShellHeaderSearch() {
   type="search"
   value={globalSearch}
   onChange={(event) =>
-    setGlobalSearch(
-      event.target.value
-    )
+    {
+      setGlobalSearch(event.target.value);
+      if (searchNoResult) {
+        setSearchNoResult(false);
+      }
+    }
   }
   onKeyDown={(event) => {
   if (event.key !== "Enter") return;
