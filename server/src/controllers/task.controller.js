@@ -303,30 +303,11 @@ export async function getTasks(_req, res) {
     const actorRole = String(_req.user?.role ?? "").trim().toUpperCase();
     const actorUserId = String(_req.user?.userId ?? "").trim();
 
+
     const projectFilter = _req.query.projectId
       ? { projectId: _req.query.projectId }
       : {};
     const q = typeof _req.query.q === "string" ? _req.query.q.trim() : "";
-    const roleWhere = isSuperAdmin(_req.user.role)
-      ? {}
-      : getDepartmentScopedTaskWhere(
-          await getCurrentUserDepartmentId(_req.user.userId),
-          _req.user.userId,
-          _req.user.role
-        );
-    const searchWhere = q
-      ? {
-          OR: [
-            { title: { contains: q, mode: "insensitive" } },
-            { description: { contains: q, mode: "insensitive" } },
-            { project: { name: { contains: q, mode: "insensitive" } } },
-            { assignments: { some: { user: { name: { contains: q, mode: "insensitive" } } } } },
-          ],
-        }
-      : {};
-    const where = { AND: [roleWhere, projectFilter, searchWhere] };
-
-  
     const isLeadership =
       actorRole === "SUPERADMIN" || actorRole === "ADMIN" || actorRole === "MANAGER";
 
@@ -334,6 +315,7 @@ export async function getTasks(_req, res) {
       return res.status(401).json({ error: "Unauthorized user context" });
     }
 
+    // Compose roleWhere based on leadership
     const roleWhere = isLeadership
       ? {}
       : {
@@ -345,9 +327,24 @@ export async function getTasks(_req, res) {
             },
           },
         };
+
+    // Compose searchWhere if q is present
+    const searchWhere = q
+      ? {
+          OR: [
+            { title: { contains: q, mode: "insensitive" } },
+            { description: { contains: q, mode: "insensitive" } },
+            { project: { name: { contains: q, mode: "insensitive" } } },
+            { assignments: { some: { user: { name: { contains: q, mode: "insensitive" } } } } },
+          ],
+        }
+      : {};
+
+    // Merge all filters into one where object
     const where = {
       ...roleWhere,
       ...projectFilter,
+      ...searchWhere,
     };
 
     const paginate = String(_req.query.paginate || "").toLowerCase() === "true";
