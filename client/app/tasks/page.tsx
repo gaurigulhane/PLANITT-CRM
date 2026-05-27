@@ -1,7 +1,8 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Suspense, useDeferredValue, useEffect, useMemo, useState, type ReactNode } from "react";
 import { CRMShell } from "@/components/layout/crm-shell";
+import { useCrmSearch } from "@/components/providers/crm-search-provider";
 import { TaskList } from "@/components/modules/task-list";
 import { StatePanel } from "@/components/shared/state-panel";
 import { renderSessionGate } from "@/components/shared/session-gate";
@@ -59,7 +60,14 @@ function TasksPageContent() {
   });
   const [assignPickerQuery, setAssignPickerQuery] = useState("");
   const [assignPickerRole, setAssignPickerRole] = useState<MemberRoleFilter>("ALL");
-
+  const {
+ globalSearch,
+ searchSubmitted,
+ resetSearch
+}
+=
+useCrmSearch();
+  const taskSearch = useDeferredValue(globalSearch.trim());
   const fieldStyle = {
     borderColor: "var(--border)",
     background: "var(--surface-soft)",
@@ -171,6 +179,21 @@ function TasksPageContent() {
 
   const loadTasks = async (append = false) => {
     const offset = append ? nextTaskOffset : 0;
+    const params = new URLSearchParams({
+      paginate: "true",
+      limit: "30",
+      offset: String(offset),
+    });
+    if (
+  searchSubmitted &&
+  taskSearch
+) {
+  params.set(
+    "q",
+    taskSearch
+  );
+}
+    const data = await apiGet<PaginatedResponse<Task>>(`/tasks?${params.toString()}`);
     const projectFilter =
       selectedProjectId !== "ALL" ? `&projectId=${encodeURIComponent(selectedProjectId)}` : "";
     const data = await apiGet<PaginatedResponse<Task>>(
@@ -188,8 +211,10 @@ function TasksPageContent() {
   };
 
   useEffect(() => {
+    if (!searchSubmitted) return;
     async function fetchData() {
       try {
+        setLoading(true);
         setError("");
         await Promise.all([loadTasks(false), loadProjects()]);
       } catch (err) {
@@ -202,6 +227,7 @@ function TasksPageContent() {
     if (user) {
       void fetchData();
     }
+  }, [user, taskSearch]);
   }, [user, selectedProjectId]);
 
   useRealtimeRefresh(user, ["task:updated", "issue:updated", "org:updated"], async () => {
@@ -503,6 +529,19 @@ function TasksPageContent() {
                   {tasksTotal ? `Showing ${visibleTasks.length} of ${tasksTotal}` : `${visibleTasks.length} loaded`}
                 </span>
               </div>
+              <span className="text-sm tabular-nums text-[var(--text-soft)]">
+                {loading
+                  ? taskSearch
+                    ? "Searching..."
+                    : "Loading..."
+                  : tasks.length === 0
+                    ? taskSearch
+                      ? `No results found for "${taskSearch}"`
+                      : "No tasks available yet."
+                    : tasksTotal
+                      ? `Showing ${tasks.length} of ${tasksTotal}`
+                      : `${tasks.length} loaded`}
+              </span>
             </div>
             {filterOpen ? (
               <div
@@ -544,7 +583,10 @@ function TasksPageContent() {
             {loading ? <p className="mt-6 text-sm text-(--text-soft)">Loading tasks...</p> : null}
             {!loading && error ? <p className="mt-6 text-sm font-medium text-rose-600">{error}</p> : null}
 
+            
+
             <div className="mt-6 max-h-[min(70vh,900px)] overflow-y-auto pr-1">
+              {!loading && tasks.length > 0 ? (
               {visibleTasks.length ? (
                 <TaskList
                   tasks={visibleTasks}
@@ -554,7 +596,7 @@ function TasksPageContent() {
                   initialIssueTaskId={initialIssueTaskId}
                   initialIssueId={initialIssueId}
                 />
-              ) : (
+              ) : !loading && !error ? (
                 <div
                   className="rounded-3xl border border-dashed p-8 text-sm"
                   style={{
@@ -563,10 +605,11 @@ function TasksPageContent() {
                     color: "var(--text-soft)",
                   }}
                 >
+                  {taskSearch ? `No results found for "${taskSearch}".` : "No tasks available yet."}
                   No tasks match the current filters.
                 </div>
-              )}
-              {hasMoreTasks ? (
+              ) : null}
+              {!loading && hasMoreTasks ? (
                 <div className="sticky bottom-0 mt-4 flex justify-center border-t pt-3" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
                   <button
                     type="button"
