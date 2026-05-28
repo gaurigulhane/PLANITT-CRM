@@ -195,8 +195,14 @@ export function useNotifications(user: CRMUser) {
     };
 
     const handleLeaveEvent = (eventType: string, payload: any = {}) => {
+      if (payload.actorId === user.id) {
+        return;
+      }
+
       const assignedUserIds: string[] = Array.isArray(payload.assignedUserIds) ? payload.assignedUserIds : [];
-      if (!assignedUserIds.includes(user.id)) {
+      const notifyRoles: string[] = Array.isArray(payload.notifyRoles) ? payload.notifyRoles : [];
+      const shouldNotify = assignedUserIds.includes(user.id) || notifyRoles.includes(user.role);
+      if (!shouldNotify) {
         return;
       }
 
