@@ -5,15 +5,22 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { apiGet, apiPost } from "@/lib/api";
 import { clearToken } from "@/lib/auth";
+import {
+ showToast
+}
+from
+"@/hooks/use-toast";
 import { useCrmSearch } from "@/components/providers/crm-search-provider";
 import { useTheme } from "@/components/providers/theme-provider";
-import { useNotifications } from "@/hooks/use-notifications";
+import { useNotificationsBackend } from "@/hooks/use-notifications-backend";
 import { migrateLegacyThemeKeys } from "@/lib/theme-storage";
 import type { CRMUser, DashboardSummary, EmployeeDashboardSummary } from "@/types/crm";
 
 type CRMShellProps = {
   children: React.ReactNode;
   user: CRMUser;
+  /** Hides the in-page title/search bar on mobile to maximize content area (e.g. chat). */
+  compactMobileChrome?: boolean;
 };
 
 type NavItem = {
@@ -32,6 +39,7 @@ const roleLabel: Record<CRMUser["role"], string> = {
 
 const pageTitles: Record<string, string> = {
   "/dashboard": "Dashboard",
+  "/analytics": "Analytics & Reports",
   "/projects": "Projects",
   "/tasks": "Tasks",
   "/leaves": "Leaves",
@@ -39,7 +47,10 @@ const pageTitles: Record<string, string> = {
   "/departments": "Departments",
   "/logs": "Logs",
   "/chat": "Chats",
+  "/credentials": "Credentials",
+  "/checklist": "Checklist",
   "/settings": "Settings",
+  "/notifications": "Notifications",
 };
 
 function initials(name: string) {
@@ -49,6 +60,50 @@ function initials(name: string) {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("");
+}
+
+function UserAvatar({
+  name,
+  avatarUrl,
+  authProvider,
+  className,
+}: {
+  name: string;
+  avatarUrl?: string | null;
+  authProvider?: CRMUser["authProvider"];
+  className: string;
+}) {
+  const [imageFailed, setImageFailed] = useState(false);
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [avatarUrl, authProvider]);
+
+  const showPhoto = authProvider === "google" && Boolean(avatarUrl) && !imageFailed;
+
+  if (showPhoto) {
+    return (
+      <img
+        src={avatarUrl as string}
+        alt={`${name} profile picture`}
+        className={`block ${className} object-cover`}
+        referrerPolicy="no-referrer"
+        onError={() => setImageFailed(true)}
+      />
+    );
+  }
+
+  return (
+    <div
+      className={`flex items-center justify-center font-bold text-white ${className}`}
+      style={{
+        background: "linear-gradient(135deg, rgba(255,255,255,0.24), rgba(255,255,255,0.12))",
+      }}
+      aria-label={`${name} default avatar`}
+    >
+      <span>{initials(name)}</span>
+    </div>
+  );
 }
 
 function CRMShellHeaderSearch() {
@@ -63,7 +118,7 @@ function CRMShellHeaderSearch() {
   
 
   return (
-    <label className="relative block">
+    <label className="relative block w-full min-w-0">
       <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-[var(--text-faint)]">
         Search
       </span>
@@ -101,7 +156,7 @@ function CRMShellHeaderSearch() {
   setSearchNoResult(true);
 }
 }}
-  className="crm-input h-10 w-full rounded-md pl-16 pr-3 text-sm sm:w-72"
+  className="crm-input h-10 w-full min-w-0 rounded-md pl-16 pr-3 text-sm sm:w-72"
   placeholder="Search anything..."
 />
 {searchNoResult && (
@@ -122,7 +177,7 @@ function CRMShellHeaderSearch() {
   );
 }
 
-export function CRMShell({ children, user }: CRMShellProps) {
+export function CRMShell({ children, user, compactMobileChrome = false }: CRMShellProps) {
   
   const { globalSearch } = useCrmSearch();
   const pathname = usePathname();
@@ -130,7 +185,16 @@ export function CRMShell({ children, user }: CRMShellProps) {
   const { theme, setTheme } = useTheme();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const { items, unreadCount, lastPushedId, markAllRead, markRead, clearAll } = useNotifications(user);
+  
+  const {
+    items = [],
+    unreadCount = 0,
+    lastPushedId = "",
+    markAllRead,
+    markRead,
+    clearAll,
+  } = useNotificationsBackend(user);
+  
   const [toastVisible, setToastVisible] = useState(false);
   const [attendanceLoading, setAttendanceLoading] = useState(false);
   const [checkedIn, setCheckedIn] = useState(false);
@@ -186,11 +250,31 @@ export function CRMShell({ children, user }: CRMShellProps) {
       if (checkedIn) {
         await apiPost("/attendance/checkout");
         setCheckedIn(false);
+        showToast(
+        "Checked out successfully.",
+        "success"
+      );
       } else {
         await apiPost("/attendance/checkin");
         setCheckedIn(true);
+        showToast(
+        "Checked in successfully.",
+        "success"
+      );
+
       }
       window.dispatchEvent(new CustomEvent("attendance:local-updated"));
+       } catch (err) {
+
+    showToast(
+      err instanceof Error
+        ? err.message
+        : checkedIn
+        ? "Failed to check out"
+        : "Failed to check in",
+
+      "error"
+    );
     } finally {
       setAttendanceLoading(false);
     }
@@ -199,7 +283,16 @@ export function CRMShell({ children, user }: CRMShellProps) {
   const navItems: NavItem[] = [
     { href: "/dashboard", label: "Dashboard", icon: "D" },
     ...(user.role === "SUPERADMIN" || user.role === "ADMIN" || user.role === "MANAGER"
+      ? [{ href: "/analytics", label: "Analytics", icon: "A" }]
+      : []),
+    ...(user.role === "SUPERADMIN" || user.role === "ADMIN" || user.role === "MANAGER"
       ? [{ href: "/projects", label: "Projects", icon: "P" }]
+      : []),
+    ...(user.role === "SUPERADMIN" || user.role === "ADMIN"
+      ? [{ href: "/credentials", label: "Credentials", icon: "K" }]
+      : []),
+    ...(user.role === "SUPERADMIN" || user.role === "ADMIN"
+      ? [{ href: "/checklist", label: "Checklist", icon: "✓" }]
       : []),
     { href: "/tasks", label: "Tasks", icon: "T" },
     { href: "/leaves", label: "Leaves", icon: "L" },
@@ -239,7 +332,7 @@ export function CRMShell({ children, user }: CRMShellProps) {
     setTheme(theme === "light" ? "dark" : "light");
   };
 
-  const pageTitle = pageTitles[pathname] ?? "CRM";
+  const pageTitle = pageTitles[pathname] ?? (pathname.startsWith("/leaves") ? "Leaves" : "CRM");
 
   return (
     <div
@@ -296,13 +389,13 @@ export function CRMShell({ children, user }: CRMShellProps) {
         />
       ) : null}
 
-      <div className="flex min-h-screen flex-col gap-3 px-2 pb-3 pt-[3.75rem] sm:px-3 sm:py-3 lg:h-screen lg:flex-row lg:gap-0 lg:overflow-hidden lg:px-0 lg:pb-0 lg:pt-0">
+      <div className="flex min-h-screen flex-col gap-2 px-2 pb-3 pt-[calc(3.75rem+var(--crm-safe-top))] sm:gap-3 sm:px-3 sm:py-3 lg:h-screen lg:flex-row lg:gap-0 lg:overflow-hidden lg:px-0 lg:pb-0 lg:pt-0">
         <aside
           className={`fixed bottom-0 left-0 top-14 z-50 w-[min(288px,90vw)] overflow-hidden rounded-r-lg border px-3 py-3 shadow-xl transition-transform duration-200 ease-out lg:relative lg:top-0 lg:z-30 lg:h-full lg:w-[240px] lg:shrink-0 lg:rounded-none lg:border-b-0 lg:border-l-0 lg:border-r lg:border-t-0 lg:shadow-none lg:transition-none ${
             mobileNavOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
           }`}
           style={{
-            background: theme === "dark" 
+            background: theme === "dark"
               ? "linear-gradient(180deg, #071120 0%, #0b1626 100%)"
               : "linear-gradient(180deg, #356bff 0%, #063ce9 100%)",
             borderColor: "rgba(255,255,255,0.14)",
@@ -337,9 +430,7 @@ export function CRMShell({ children, user }: CRMShellProps) {
                     href={item.href}
                     onClick={() => setMobileNavOpen(false)}
                     className={`flex items-center gap-3 rounded-md px-3 py-2.5 text-[13px] font-semibold transition ${
-                      isActive
-                        ? "bg-white text-blue-700 shadow-sm"
-                        : "text-white/78 hover:bg-white/10 hover:text-white"
+                      isActive ? "bg-white text-blue-700 shadow-sm" : "text-white/78 hover:bg-white/10 hover:text-white"
                     }`}
                   >
                     <span
@@ -357,9 +448,12 @@ export function CRMShell({ children, user }: CRMShellProps) {
 
             <div className="mt-auto rounded-lg border border-white/12 bg-white/8 p-3">
               <div className="flex items-center gap-3">
-                <div className="crm-avatar flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold">
-                  {initials(user.name)}
-                </div>
+                <UserAvatar
+                  name={user.name}
+                  avatarUrl={user.avatarUrl}
+                  authProvider={user.authProvider}
+                  className="crm-avatar h-9 w-9 rounded-full text-xs"
+                />
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-white">{user.name}</p>
                   <p className="text-xs text-white/60">{roleLabel[user.role]}</p>
@@ -386,7 +480,9 @@ export function CRMShell({ children, user }: CRMShellProps) {
 
         <main className="min-h-0 min-w-0 flex-1 overflow-x-hidden lg:flex lg:h-full lg:flex-col lg:overflow-hidden lg:p-3">
           <header
-            className="mb-3 flex shrink-0 flex-col gap-3 rounded-lg border px-4 py-3 md:flex-row md:items-center md:justify-between"
+            className={`mb-2 flex shrink-0 flex-col gap-3 rounded-lg border px-3 py-3 sm:mb-3 sm:px-4 md:flex-row md:items-center md:justify-between ${
+              compactMobileChrome ? "hidden lg:flex" : ""
+            }`}
             style={{
               background: "var(--surface)",
               borderColor: "var(--border)",
@@ -399,15 +495,15 @@ export function CRMShell({ children, user }: CRMShellProps) {
               </p>
               <h1 className="mt-1 text-xl font-bold text-[var(--text-main)]">{pageTitle}</h1>
             </div>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center md:justify-end">
               <CRMShellHeaderSearch />
-              <div className="flex items-center gap-2">
+              <div className="flex min-w-0 flex-wrap items-center gap-2 sm:justify-end">
                 {canUseAttendanceQuickAction ? (
                   <button
                     type="button"
                     onClick={() => void handleAttendanceQuickAction()}
                     disabled={attendanceLoading}
-                    className="flex h-10 items-center justify-center rounded-md border px-3 text-xs font-bold transition disabled:cursor-wait disabled:opacity-70"
+                    className="flex h-10 min-w-0 items-center justify-center rounded-md border px-3 text-xs font-bold transition disabled:cursor-wait disabled:opacity-70"
                     style={{
                       borderColor: "var(--border)",
                       background: checkedIn ? "var(--danger)" : "var(--accent)",
@@ -421,15 +517,14 @@ export function CRMShell({ children, user }: CRMShellProps) {
                         : "Check in"}
                   </button>
                 ) : null}
-                <div className="relative">
+                <div className="relative min-w-0">
                   <button
                     type="button"
-                    className="relative flex h-10 items-center justify-center gap-2 rounded-md border px-3 text-xs font-bold"
+                    className="relative flex h-10 min-w-0 items-center justify-center gap-2 rounded-md border px-3 text-xs font-bold"
                     style={{ borderColor: "var(--border)", background: "var(--surface)", color: "var(--text-soft)" }}
                     aria-label="Notifications"
                     onClick={() => {
                       setNotificationsOpen((value) => !value);
-                      markAllRead();
                     }}
                   >
                     <svg
@@ -457,7 +552,7 @@ export function CRMShell({ children, user }: CRMShellProps) {
                   </button>
                   {notificationsOpen ? (
                     <div
-                      className="absolute right-0 z-50 mt-2 w-[min(360px,calc(100vw-2rem))] rounded-lg border p-3"
+                      className="absolute right-0 z-50 mt-2 max-h-[min(70vh,32rem)] w-[min(360px,calc(100vw-1.25rem))] max-w-[calc(100vw-1.25rem)] overflow-hidden rounded-lg border p-3 sm:w-[min(360px,calc(100vw-2rem))] sm:max-w-[calc(100vw-2rem)]"
                       style={{
                         background: "var(--surface)",
                         borderColor: "var(--border)",
@@ -465,7 +560,12 @@ export function CRMShell({ children, user }: CRMShellProps) {
                       }}
                     >
                       <div className="mb-2 flex items-center justify-between">
-                        <p className="text-sm font-semibold text-[var(--text-main)]">Notifications</p>
+                        <Link
+                          href="/notifications"
+                          className="text-sm font-semibold text-[var(--text-main)] hover:text-[var(--accent-strong)]"
+                        >
+                          Notifications
+                        </Link>
                         <div className="flex items-center gap-2">
                           <button
                             type="button"
@@ -485,13 +585,13 @@ export function CRMShell({ children, user }: CRMShellProps) {
                           </button>
                         </div>
                       </div>
-                      <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
+                      <div className="max-h-[min(56vh,20rem)] space-y-2 overflow-y-auto pr-1">
                         {items.length === 0 ? (
                           <p className="rounded-md border px-3 py-4 text-xs" style={{ borderColor: "var(--border)", color: "var(--text-soft)" }}>
                             No notifications yet.
                           </p>
                         ) : (
-                          items.map((item) => (
+                          items.slice(0, 8).map((item) => (
                             <button
                               key={item.id}
                               type="button"
@@ -508,9 +608,14 @@ export function CRMShell({ children, user }: CRMShellProps) {
                             >
                               <p className="text-sm font-semibold text-[var(--text-main)]">{item.title}</p>
                               <p className="mt-1 text-xs text-[var(--text-soft)]">{item.message}</p>
-                              <p className="mt-2 text-[10px] uppercase tracking-[0.14em] text-[var(--text-faint)]">
-                                {new Date(item.createdAt).toLocaleString()}
-                              </p>
+                              <div className="mt-2 flex items-center justify-between gap-2">
+                                <span className="text-[10px] uppercase tracking-[0.14em] text-[var(--text-faint)]">
+                                  {item.priority}
+                                </span>
+                                <span className="text-[10px] text-[var(--text-faint)]">
+                                  {new Date(item.createdAt).toLocaleString()}
+                                </span>
+                              </div>
                             </button>
                           ))
                         )}
@@ -518,9 +623,12 @@ export function CRMShell({ children, user }: CRMShellProps) {
                     </div>
                   ) : null}
                 </div>
-                <div className="crm-avatar flex h-10 w-10 items-center justify-center rounded-full text-xs font-bold">
-                  {initials(user.name)}
-                </div>
+                <UserAvatar
+                  name={user.name}
+                  avatarUrl={user.avatarUrl}
+                  authProvider={user.authProvider}
+                  className="crm-avatar h-10 w-10 rounded-full text-xs"
+                />
               </div>
             </div>
           </header>
@@ -539,7 +647,13 @@ export function CRMShell({ children, user }: CRMShellProps) {
               <p className="mt-1 text-xs text-[var(--text-soft)]">{latestItem.message}</p>
             </button>
           ) : null}
-          <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden lg:flex lg:flex-col lg:overflow-y-auto">{children}</div>
+          <div
+            className={`min-h-0 min-w-0 flex-1 overflow-x-hidden lg:flex lg:flex-col ${
+              compactMobileChrome ? "overflow-hidden lg:overflow-y-auto" : "lg:overflow-y-auto"
+            }`}
+          >
+            {children}
+          </div>
         </main>
       </div>
     </div>

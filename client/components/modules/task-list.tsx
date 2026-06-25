@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { MemberPickerToolbar, filterMembersForPicker, sortedUniqueRoles, type MemberRoleFilter } from "@/components/shared/member-picker-toolbar";
 import { apiDelete, apiPost, apiPut } from "@/lib/api";
+import { showToast } from "@/hooks/use-toast";
 import { getTaskAssignableRoles } from "@/lib/dashboard";
 import {
   TASK_PRIORITY_OPTIONS,
@@ -260,17 +261,48 @@ export function TaskList({
   };
 
   const handleTaskUpdate = async (
-    taskId: string,
-    payload: Partial<Pick<Task, "status" | "progress" | "priority">>
-  ) => {
-    try {
-      setSavingId(taskId);
-      await apiPut(`/tasks/${taskId}`, payload);
-      await onUpdated?.();
-    } finally {
-      setSavingId(null);
-    }
-  };
+  taskId: string,
+  payload: Partial<
+    Pick<Task, "status" | "progress" | "priority">
+  >
+) => {
+
+  try {
+
+    setSavingId(taskId);
+
+    await apiPut(
+      `/tasks/${taskId}`,
+      payload
+    );
+
+    showToast(
+      "Task updated successfully.",
+      "success"
+    );
+
+    await onUpdated?.();
+
+  }
+
+  catch (error) {
+
+    showToast(
+      error instanceof Error
+        ? error.message
+        : "Failed to update task",
+      "error"
+    );
+
+  }
+
+  finally {
+
+    setSavingId(null);
+
+  }
+
+};
 
   const handleChecklistToggle = async (itemId: string, taskId: string) => {
     try {
@@ -371,23 +403,37 @@ export function TaskList({
     }
   };
 
-  const handleDeleteTask = async (taskId: string) => {
-    const shouldDelete = window.confirm("Delete this task permanently?");
-    if (!shouldDelete) {
-      return;
-    }
+  const handleDeleteTask = async (
+  taskId: string
+) => {
 
-    try {
-      setSavingId(taskId);
-      await apiDelete(`/tasks/${taskId}`);
-      if (editingTaskId === taskId) {
-        setEditingTaskId(null);
-      }
-      await onUpdated?.();
-    } finally {
-      setSavingId(null);
-    }
-  };
+  try {
+
+    await apiDelete(
+      `/tasks/${taskId}`
+    );
+
+    showToast(
+      "Task deleted successfully.",
+      "success"
+    );
+
+    await onUpdated?.();
+
+  }
+
+  catch (error) {
+
+    showToast(
+      error instanceof Error
+        ? error.message
+        : "Failed to delete task",
+      "error"
+    );
+
+  }
+
+};
 
   return (
     <div className="space-y-4">
@@ -454,12 +500,24 @@ export function TaskList({
                         </h3>
                         <div className="flex shrink-0 flex-wrap items-center gap-2 lg:hidden">
                         {!showPrioritySelect ? (
-                          <span
-                            className={`rounded-md px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${priorityBadgeClass[task.priority ?? "MEDIUM"]}`}
-                          >
-                            {TASK_PRIORITY_OPTIONS.find((o) => o.value === (task.priority ?? "MEDIUM"))?.label ??
-                              "Medium"}
-                          </span>
+  <span
+  style={{
+    background:
+      task.priority === "URGENT"
+        ? "#7f1d1d"
+        : task.priority === "HIGH"
+        ? "#7c2d12"
+        : task.priority === "MEDIUM"
+        ? "#1e3a8a"
+        : "#14532d",
+
+    color: "white",
+    padding: "6px 10px",
+    borderRadius: "8px",
+  }}
+>
+  {task.priority}
+</span>
                         ) : null}
                         {!showInlineStatusSelect ? (
                           <span className={`rounded-md px-2.5 py-1 text-[11px] font-bold ${statusStyles[task.status]}`}>
@@ -475,7 +533,7 @@ export function TaskList({
                                 priority: event.target.value as TaskPriority,
                               })
                             }
-                            className="rounded-md border px-2 py-1 text-xs outline-none"
+                            className="w-full min-w-0 rounded-md border px-2 py-1 text-xs outline-none sm:w-auto"
                             style={{
                               borderColor: "var(--border)",
                               background: "var(--surface)",
@@ -499,7 +557,7 @@ export function TaskList({
                                 status: event.target.value as Task["status"],
                               })
                             }
-                            className="rounded-md border px-2 py-1 text-xs outline-none"
+                            className="w-full min-w-0 rounded-md border px-2 py-1 text-xs outline-none sm:w-auto"
                             style={{
                               borderColor: "var(--border)",
                               background: "var(--surface)",
@@ -544,7 +602,7 @@ export function TaskList({
                         priority: event.target.value as TaskPriority,
                       })
                     }
-                    className="rounded-md border px-2 py-1 text-xs outline-none"
+                    className="w-full min-w-0 rounded-md border px-2 py-1 text-xs outline-none sm:w-auto"
                     style={{
                       borderColor: "var(--border)",
                       background: "var(--surface)",
@@ -568,7 +626,7 @@ export function TaskList({
                         status: event.target.value as Task["status"],
                       })
                     }
-                    className="rounded-md border px-2 py-1 text-xs outline-none"
+                    className="w-full min-w-0 rounded-md border px-2 py-1 text-xs outline-none sm:w-auto"
                     style={{
                       borderColor: "var(--border)",
                       background: "var(--surface)",
@@ -741,7 +799,7 @@ export function TaskList({
                 <label className="grid gap-1.5">
                   <span className="text-xs font-semibold text-(--text-soft)">Priority</span>
                   <select
-                    className="h-11 rounded-md border px-3 text-sm outline-none"
+                    className="h-11 w-full min-w-0 rounded-md border px-3 text-sm outline-none"
                     style={{ borderColor: "var(--border)", background: "var(--surface)", color: "var(--text-main)" }}
                     value={editForms[task.id]?.priority ?? "MEDIUM"}
                     onChange={(event) =>
@@ -772,8 +830,8 @@ export function TaskList({
               <label className="grid gap-1.5">
                 <span className="text-xs font-semibold text-(--text-soft)">Deadline</span>
                 <input
-                  type="datetime-local"
-                  className="h-11 rounded-md border px-3 text-sm outline-none"
+                  type="date"
+                  className="h-11 w-full min-w-0 rounded-md border px-3 text-sm outline-none"
                   style={{ borderColor: "var(--border)", background: "var(--surface)", color: "var(--text-main)" }}
                   value={editForms[task.id]?.deadlineLocal ?? ""}
                   onChange={(event) =>

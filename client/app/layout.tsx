@@ -5,6 +5,11 @@ import { SocketProvider } from "@/components/providers/socket-provider";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { DEFAULT_CRM_THEME } from "@/lib/theme-storage";
 import type { Metadata, Viewport } from "next";
+import {
+ Toast
+}
+from
+"@/components/shared/toast";
 import { Manrope } from "next/font/google";
 
 const manrope = Manrope({
@@ -34,6 +39,7 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 5,
+  viewportFit: "cover",
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#f4f7ff" },
     { media: "(prefers-color-scheme: dark)", color: "#071120" },
@@ -65,6 +71,7 @@ export default function RootLayout({
             <CrmSearchProvider>{children}</CrmSearchProvider>
           </SocketProvider>
         </ThemeProvider>
+        <Toast/>
       </body>
     </html>
   );

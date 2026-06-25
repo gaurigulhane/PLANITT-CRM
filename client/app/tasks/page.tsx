@@ -6,16 +6,24 @@ import { useCrmSearch } from "@/components/providers/crm-search-provider";
 import { TaskList } from "@/components/modules/task-list";
 import { StatePanel } from "@/components/shared/state-panel";
 import { renderSessionGate } from "@/components/shared/session-gate";
+import { ResponsiveSelect } from "@/components/shared/responsive-select";
 import { useRealtimeRefresh } from "@/hooks/use-realtime-refresh";
 import { useSession } from "@/hooks/use-session";
 import { MemberPickerToolbar, type MemberRoleFilter } from "@/components/shared/member-picker-toolbar";
 import { LoadingRows } from "@/components/shared/loading-skeleton";
 import { usePaginatedDirectoryUsers } from "@/hooks/use-paginated-directory-users";
 import { apiGet, apiPost } from "@/lib/api";
+import { Skeleton } from "@/components/shared/skeleton";
 import { getTaskAssignableRoles, isAdminRole } from "@/lib/dashboard";
 import { useSearchParams } from "next/navigation";
+import { parseSmartTaskPaste } from "@/lib/smart-paste";
 import { TASK_PRIORITY_OPTIONS } from "@/lib/task-groups";
-import type { CRMUser, Project, Task, TaskPriority } from "@/types/crm";
+import {
+ showToast
+}
+from
+"@/hooks/use-toast";
+import type { CRMUser, Task, Project ,TaskPriority } from "@/types/crm";
 type PaginatedResponse<T> = { items: T[]; total: number; hasMore: boolean; nextOffset: number };
 
 function Surface({ children, className = "" }: { children: ReactNode; className?: string }) {
@@ -58,6 +66,11 @@ function TasksPageContent() {
     priority: "MEDIUM" as TaskPriority,
     deadlineAt: "",
   });
+  const [
+  smartPasteText,
+  setSmartPasteText
+] =
+useState("");
   const [assignPickerQuery, setAssignPickerQuery] = useState("");
   const [assignPickerRole, setAssignPickerRole] = useState<MemberRoleFilter>("ALL");
   const {
@@ -84,9 +97,17 @@ useCrmSearch();
     () => [...taskAssignableRoles].sort((a, b) => a.localeCompare(b)),
     [taskAssignableRoles]
   );
+  const projectFilterOptions = useMemo(
+    () => [{ value: "ALL", label: "All projects" }, ...projects.map((project) => ({ value: project.id, label: project.name }))],
+    [projects]
+  );
+  const priorityOptions = useMemo(
+    () => TASK_PRIORITY_OPTIONS.map((option) => ({ value: option.value, label: option.label })),
+    []
+  );
 
   const directory = usePaginatedDirectoryUsers({
-    limit: 16,
+    limit: 100,
     roleFilter: assignPickerRole,
     searchQuery: assignPickerQuery,
     enabled: Boolean(user && isAdminRole(user.role)),
@@ -211,7 +232,7 @@ useCrmSearch();
         setError("");
         await Promise.all([loadTasks(false), loadProjects()]);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load tasks");
+        setError(err instanceof Error ? err.message : "Failed to load tasks" ); showToast(err instanceof Error ? err.message : "Failed to load tasks" , "error" );
       } finally {
         setLoading(false);
       }
@@ -236,8 +257,100 @@ useCrmSearch();
     }));
   };
 
+  const handleSmartPaste = () => {
+
+  if (
+    !smartPasteText.trim()
+  ) {
+
+    showToast(
+      "Paste task content first.",
+      "error"
+    );
+
+    return;
+
+  }
+
+  const parsed =
+    parseSmartTaskPaste(
+      smartPasteText
+    );
+    
+    const hasStructure =
+  smartPasteText.includes("#") ||
+  smartPasteText.toLowerCase().includes("priority") ||
+  smartPasteText.includes("-") ||
+  /^\d+\./m.test(smartPasteText);
+
+if (
+  !hasStructure &&
+  parsed.checklistItems.length === 0
+) {
+
+  showToast(
+    "Could not detect task structure. Use the suggested format.",
+    "error"
+  );
+
+  return;
+
+}
+  if (
+  parsed.title === "Untitled task" &&
+  !parsed.description &&
+  parsed.checklistItems.length === 0
+) {
+
+  showToast(
+    "Unable to map content into task fields.",
+    "error"
+  );
+
+  return;
+
+}
+
+  setForm((current) => ({
+
+    ...current,
+
+    title:
+      parsed.title,
+
+    description:
+      parsed.description,
+
+    priority:
+      parsed.priority,
+
+    checklistText:
+      parsed.checklistItems.join("\n"),
+
+  }));
+
+  showToast(
+    "Task fields auto-filled.",
+    "success"
+  );
+
+};
+
   const createTask = async () => {
     try {
+      if (
+  !form.title.trim() ||
+  form.title === "Untitled task"
+) {
+
+  showToast(
+    "Task title is required.",
+    "error"
+  );
+
+  return;
+
+}
       setCreating(true);
       setError("");
       setNotice("");
@@ -254,11 +367,21 @@ useCrmSearch();
           .filter(Boolean),
       });
       setForm({ title: "", description: "", userIds: [], progress: 0, checklistText: "", priority: "MEDIUM", deadlineAt: "" });
-      setNotice("Task created successfully.");
-      await loadTasks(false);
+      showToast(
+        "Task created successfully.",
+        "success"
+      );      
+await loadTasks(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create task");
-    } finally {
+setError(
+  err instanceof Error
+    ? err.message
+    : "Failed to create task"
+);   showToast(
+  err instanceof Error
+    ? err.message
+    : "Failed to create task" , "error"
+); } finally {
       setCreating(false);
     }
   };
@@ -276,11 +399,37 @@ useCrmSearch();
   }
 
   if (!user) {
-    return null;
-  }
+  return null;
+}
 
+if (loading) {
   return (
     <CRMShell user={user}>
+      <div className="space-y-6 p-6 animate-pulse">
+
+        <Skeleton className="h-12 w-64" />
+
+        <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton
+              key={i}
+              className="h-28 w-full rounded-2xl"
+            />
+          ))}
+        </div>
+
+        <div className="grid gap-6 xl:grid-cols-[380px_1fr]">
+          <Skeleton className="h-[700px] w-full rounded-3xl" />
+          <Skeleton className="h-[700px] w-full rounded-3xl" />
+        </div>
+
+      </div>
+    </CRMShell>
+  );
+}
+  
+return (
+  <CRMShell user={user}>
       <div className="min-w-0 space-y-4 overflow-x-hidden pb-4">
         <Surface>
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-(--text-faint)">
@@ -292,7 +441,7 @@ useCrmSearch();
               ? "Create and assign work in a focused workspace without oversized panels."
               : "Review assignments, update progress, and report blockers from one clean view."}
           </p>
-          <div className="mt-5 grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+          <div className="mt-5 grid gap-3 md:grid-cols-3 xl:grid-cols-4">
             {[
               { label: "All tasks", value: taskAnalytics.total },
               { label: "Done", value: taskAnalytics.done },
@@ -322,6 +471,86 @@ useCrmSearch();
               <h2 className="mt-2 text-xl font-semibold text-(--text-main)">Assign work clearly</h2>
 
               <div className="mt-5 grid gap-4">
+                <div className="space-y-3">
+                  <textarea
+  readOnly
+  onClick={(e) => {
+  navigator.clipboard.writeText(
+    (e.target as HTMLTextAreaElement).value
+  );
+   showToast(
+    "Template copied to clipboard",
+    "success"
+   );
+}}
+  className="min-h-36 w-full rounded-2xl border px-3 py-3 text-sm"
+  style={fieldStyle}
+  value={`Title: Dashboard Fix
+
+Description:
+Review dashboard loading
+
+Priority: HIGH
+
+Checklist:
+- Fix UI
+- Fix backend`}
+/>
+
+  <textarea
+  className="min-h-[140px] w-full rounded-2xl border p-4 text-sm outline-none placeholder:text-[var(--text-soft)]"
+  style={fieldStyle}
+  placeholder={`Title: Dashboard Fix
+
+Description:
+Review dashboard loading and analytics
+
+Priority: HIGH
+
+Checklist:
+- Fix UI
+- Fix backend
+- Test responsiveness`}
+  value={smartPasteText}
+  onChange={(event) =>
+    setSmartPasteText(event.target.value)
+  }
+/>
+
+  <button
+    type="button"
+    onClick={handleSmartPaste}
+    className="rounded-xl px-4 py-2 text-sm font-semibold text-white"
+    style={{
+      background:
+        "var(--accent-strong)"
+    }}
+  >
+
+    Auto-fill from paste
+
+  </button>
+
+</div>
+              <div
+  className="rounded-2xl border p-4 text-sm"
+  style={fieldStyle}
+>
+
+  <p className="font-semibold">
+    Paste Preview
+  </p>
+
+  <p className="mt-2 whitespace-pre-wrap text-[var(--text-soft)]">
+
+    {
+      smartPasteText ||
+      "Nothing pasted yet."
+    }
+
+  </p>
+
+</div>
                 <input
                   className="h-12 rounded-2xl border px-4 outline-none"
                   style={fieldStyle}
@@ -341,8 +570,8 @@ useCrmSearch();
                 <label className="grid gap-2">
                   <span className="text-sm font-medium text-[var(--text-main)]">Deadline</span>
                   <input
-                    type="datetime-local"
-                    className="h-12 rounded-2xl border px-4 text-sm outline-none"
+                    type="date"
+                    className="h-12 w-full min-w-0 rounded-2xl border px-4 text-sm outline-none"
                     style={fieldStyle}
                     value={form.deadlineAt}
                     onChange={(event) =>
@@ -352,23 +581,19 @@ useCrmSearch();
                 </label>
                 <label className="grid gap-2">
                   <span className="text-sm font-medium text-(--text-main)">Priority</span>
-                  <select
-                    className="h-12 rounded-2xl border px-4 text-sm outline-none"
-                    style={fieldStyle}
+                  <ResponsiveSelect
+                  priorityColors
                     value={form.priority}
-                    onChange={(event) =>
+                    onChange={(value) =>
                       setForm((current) => ({
                         ...current,
-                        priority: event.target.value as TaskPriority,
+                        priority: value as TaskPriority,
                       }))
                     }
-                  >
-                    {TASK_PRIORITY_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
+                    options={priorityOptions}
+                    ariaLabel="Select task priority"
+                    buttonClassName="h-12 px-4"
+                  />
                 </label>
                 <textarea
                   className="min-h-32 rounded-2xl border px-4 py-3 outline-none"
@@ -537,27 +762,21 @@ useCrmSearch();
             </div>
             {filterOpen ? (
               <div
-                className="mt-4 grid gap-3 rounded-2xl border p-3 md:grid-cols-[minmax(220px,320px)_minmax(0,1fr)]"
+                className="mt-4 grid gap-3 rounded-2xl border p-3 md:grid-cols-[minmax(0,320px)_minmax(0,1fr)]"
                 style={{ borderColor: "var(--border)", background: "var(--surface-soft)" }}
               >
                 <label className="grid min-w-0 gap-1">
                   <span className="text-xs font-semibold uppercase tracking-[0.12em] text-(--text-soft)">Project</span>
-                  <select
-                    className="h-10 w-full rounded-xl border px-3 text-sm outline-none"
-                    style={fieldStyle}
+                  <ResponsiveSelect
                     value={selectedProjectId}
-                    onChange={(event) => {
-                      setSelectedProjectId(event.target.value);
+                    onChange={(value) => {
+                      setSelectedProjectId(value);
                       setLoading(true);
                     }}
-                  >
-                    <option value="ALL">All projects</option>
-                    {projects.map((project) => (
-                      <option key={project.id} value={project.id}>
-                        {project.name}
-                      </option>
-                    ))}
-                  </select>
+                    options={projectFilterOptions}
+                    ariaLabel="Filter tasks by project"
+                    buttonClassName="h-10 rounded-xl"
+                  />
                 </label>
                 <label className="grid min-w-0 gap-1">
                   <span className="text-xs font-semibold uppercase tracking-[0.12em] text-(--text-soft)">Task Name</span>
@@ -572,7 +791,25 @@ useCrmSearch();
               </div>
             ) : null}
 
-            {loading ? <p className="mt-6 text-sm text-(--text-soft)">Loading tasks...</p> : null}
+            {loading ? (
+
+  <div className="mt-6 space-y-6">
+
+    <Skeleton className="h-14 w-full" />
+
+    <div className="grid gap-6 lg:grid-cols-3">
+
+      <Skeleton className="h-[70vh] w-full rounded-3xl" />
+
+      <Skeleton className="h-[70vh] w-full rounded-3xl" />
+
+      <Skeleton className="h-[70vh] w-full rounded-3xl" />
+
+    </div>
+
+  </div>
+
+) : null}
             {!loading && error ? <p className="mt-6 text-sm font-medium text-rose-600">{error}</p> : null}
 
             
@@ -628,10 +865,55 @@ useCrmSearch();
 
 export default function TasksPage() {
   return (
-    <Suspense fallback={<StatePanel title="Loading tasks" description="Preparing the task workspace." />}>
+    <Suspense
+      fallback={
+        <div className="min-h-screen p-6 animate-pulse">
+          <div>
+            <div
+              className="h-4 w-28 rounded"
+              style={{ background: "var(--surface-soft)" }}
+            />
+            <div
+              className="mt-3 h-10 w-48 rounded"
+              style={{ background: "var(--surface-soft)" }}
+            />
+          </div>
+
+          <div className="mt-6 grid gap-4 lg:grid-cols-5">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div
+                key={i}
+                className="h-28 rounded-3xl border"
+                style={{
+                  borderColor: "var(--border)",
+                  background: "var(--surface-soft)",
+                }}
+              />
+            ))}
+          </div>
+
+          <div className="mt-6 grid gap-6 lg:grid-cols-[420px_1fr]">
+            <div
+              className="h-[650px] rounded-3xl border"
+              style={{
+                borderColor: "var(--border)",
+                background: "var(--surface-soft)",
+              }}
+            />
+
+            <div
+              className="h-[650px] rounded-3xl border"
+              style={{
+                borderColor: "var(--border)",
+                background: "var(--surface-soft)",
+              }}
+            />
+          </div>
+        </div>
+      }
+    >
       <TasksPageContent />
     </Suspense>
   );
 }
-
 

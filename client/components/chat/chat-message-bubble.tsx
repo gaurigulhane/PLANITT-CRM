@@ -1,10 +1,10 @@
 "use client";
 
 import type { ChatMessage, CRMUser } from "@/types/crm";
+import { UserAvatar } from "@/components/shared/user-avatar";
 import {
   formatTime,
   resolveAttachmentUrl,
-  initials,
   extractUrls,
   getUrlLabel,
 } from "./chat-utils";
@@ -36,15 +36,15 @@ export function ChatMessageBubble({
   return (
     <article className={`flex items-end gap-2 ${own ? "justify-end" : "justify-start"}`}>
       {!own && (
-        <div
-          className="mb-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white"
-          style={{ background: "var(--accent)" }}
-        >
-          {initials(message.author.name)}
-        </div>
+        <UserAvatar
+          name={message.author.name}
+          avatarUrl={message.author.avatarUrl}
+          authProvider={message.author.authProvider}
+          className="mb-1 h-8 w-8 shrink-0 rounded-full text-[10px]"
+        />
       )}
       <div
-        className="relative max-w-[760px] rounded-2xl border px-4 py-3"
+        className="relative max-w-[min(88vw,560px)] rounded-2xl border px-3 py-2.5 sm:px-4 sm:py-3"
         style={{
           borderColor: own
             ? "color-mix(in srgb, var(--accent) 45%, var(--border))"
@@ -65,7 +65,8 @@ export function ChatMessageBubble({
             e.stopPropagation();
             onOpenMenu(openMenuId === message.id ? null : message.id);
           }}
-          className="absolute right-2 top-2 rounded-md px-2 py-0.5 text-sm text-[var(--text-soft)] hover:bg-black/5"
+          className="crm-touch-target absolute right-1 top-1 rounded-md px-2 py-1 text-sm text-[var(--text-soft)] hover:bg-black/5 sm:right-2 sm:top-2"
+          aria-label="Message options"
         >
           ...
         </button>
@@ -127,7 +128,7 @@ export function ChatMessageBubble({
           </div>
         )}
 
-        <p className="whitespace-pre-wrap break-words text-sm leading-6 text-[var(--text-main)]">
+        <p className="whitespace-pre-wrap break-words text-sm leading-6 text-[var(--text-main)] [overflow-wrap:anywhere]">
           {message.content}
         </p>
 
@@ -139,7 +140,7 @@ export function ChatMessageBubble({
                 href={url}
                 target="_blank"
                 rel="noreferrer"
-                className="rounded-xl border px-3 py-1.5 text-xs font-semibold"
+                className="max-w-full truncate rounded-xl border px-3 py-1.5 text-xs font-semibold"
                 style={{
                   borderColor: "var(--border)",
                   background: "var(--surface)",

@@ -1,113 +1,247 @@
 export type SmartPasteResult = {
-  title?: string;
-  description?: string;
-  priority?: string;
-  checklistText?: string;
+  title: string;
+  description: string;
+  priority: "URGENT"| "LOW" | "MEDIUM" | "HIGH";
+  checklistItems: string[];
 };
 
-export function parseSmartPaste(
+const PRIORITIES = [
+   "URGENT", 
+  "LOW",
+  "MEDIUM",
+  "HIGH",
+] as const;
+
+const PRIORITY_ALIASES = {
+  urgent: "URGENT",
+  high: "HIGH",
+  med: "MEDIUM",
+  medium: "MEDIUM",
+  low: "LOW",
+} as const;
+
+export function parseSmartTaskPaste(
   text: string
 ): SmartPasteResult {
-  const result: SmartPasteResult =
-    {};
 
-  const lines =
-    text
-      .split("\n")
-      .map((x) =>
-        x.trim()
-      );
+  const lines = text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
 
-  const subtasks =
-    [];
+  let title = "";
+  let description = "";
 
-  for (
-    const line
-    of lines
-  ) {
+  let priority:
+    SmartPasteResult["priority"] =
+      "MEDIUM";
+
+  const checklistItems: string[] = [];
+  let insideChecklist =
+  false;
+  let insideDescription = false;
+
+  for (const line of lines) {
+
+
     const lower =
       line.toLowerCase();
 
+      if (lower.startsWith("title:")) {
+
+  title =
+    line
+      .split(":")
+      .slice(1)
+      .join(":")
+      .trim();
+
+  continue;
+
+}
+
+if (
+  lower.startsWith(
+    "checklist:"
+  )
+) {
+
+  insideChecklist =
+    true;
+
+  continue;
+
+}
+
+if (
+  /^priority\s*:/.test(lower)
+){
+
+  const value =
+    lower
+      .replace(
+        /^priority\s*:/,
+        ""
+      )
+      .trim();
+
+  const detected =
+    PRIORITY_ALIASES[
+      value as keyof typeof PRIORITY_ALIASES
+    ];
+
+  if (detected) {
+    priority = detected;
+  }
+
+  continue;
+
+}
+
+if (
+  lower.startsWith("description:")
+) {
+
+  description =
+    line
+      .split(":")
+      .slice(1)
+      .join(":")
+      .trim();
+
+  insideDescription =
+    true;
+
+  continue;
+
+}
+
+    // title
     if (
-      lower.startsWith(
-        "title:"
-      )
-    ) {
-      result.title =
-        line
-          .replace(
-            /^title:/i,
-            ""
-          )
-          .trim();
-    }
+  !title &&
+  (
+    line.startsWith("#") ||
+    lower.startsWith("title:")
+  )
+) {
 
-    else if (
-      lower.startsWith(
-        "description:"
-      )
-    ) {
-      result.description =
-        line
-          .replace(
-            /^description:/i,
-            ""
-          )
-          .trim();
-    }
+  title =
+    line
+      .replace(/^#\s*/, "")
+      .replace(/^title\s*:/i, "")
+      .trim();
 
-    else if (
-      lower.startsWith(
-        "priority:"
-      )
-    ) {
-      result.priority =
-        line
-          .replace(
-            /^priority:/i,
-            ""
-          )
-          .trim()
-          .toUpperCase();
-    }
+  continue;
 
-    else if (
-      line.match(
-        /^[-*]\s/
-      ) ||
-      line.match(
-        /^\d+\./
-      )
-    ) {
-      subtasks.push(
-        line.replace(
-          /^[-*\d. ]+/,
-          ""
-        )
+}
+
+   
+
+    // priority
+    const detectedAlias =
+  Object.entries(
+    PRIORITY_ALIASES
+  ).find(([key]) =>
+    lower.includes(key)
+  );
+
+if (detectedAlias) {
+
+  priority =
+    detectedAlias[1];
+
+  continue;
+
+}
+
+ const remainingLines =
+  lines.slice(lines.indexOf(line));
+
+const allShortLines =
+  remainingLines.length >= 2 &&
+  remainingLines.every(
+    (item) =>
+      item.length < 80 &&
+      !item.includes(":") &&
+      !item.endsWith(".")
+  );
+
+if (allShortLines) {
+
+  checklistItems.push(
+    ...remainingLines
+  );
+
+  break;
+
+}
+if (
+  insideDescription &&
+  !lower.startsWith("checklist:")
+) {
+
+  description +=
+    `${description ? "\n" : ""}${line}`;
+
+  continue;
+
+}
+
+    // checklist
+    const isChecklist =
+      /^[-*•]/.test(line) ||
+      /^\d+\./.test(line);
+
+    if (isChecklist) {
+
+      checklistItems.push(
+        line
+          .replace(/^[-*•]\s*/, "")
+          .replace(/^\d+\.\s*/, "")
       );
+
+      continue;
+
     }
+
+    if (
+  insideChecklist
+) {
+
+  checklistItems.push(
+    line
+      .replace(/^[-*•]\s*/, "")
+      .replace(/^\d+\.\s*/, "")
+  );
+
+  continue;
+
+}
+    // description
+    description +=
+      `${line}\n`;
+
   }
 
-  result.checklistText =
-    subtasks.join(
-      "\n"
-    );
+  const hasStructure =
+  checklistItems.length > 0 ||
+  title.startsWith("#") ||
+  lines.some((line) =>
+    line.toLowerCase().includes("priority")
+  );
 
-  if (
-    !result.title
-  ) {
-    result.title =
-      lines[0];
-  }
+return {
+  title:
+    hasStructure
+      ? title 
+      : "",
 
-  if (
-    !result.description
-  ) {
-    result.description =
-      lines
-        .slice(1)
-        .join("\n");
-  }
+  description:
+    description.trim(),
 
-  return result;
+  priority,
+
+  checklistItems,
+};
+
 }

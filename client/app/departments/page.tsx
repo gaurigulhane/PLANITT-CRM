@@ -2,13 +2,17 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { CRMShell } from "@/components/layout/crm-shell";
+import { ResponsiveSelect } from "@/components/shared/responsive-select";
 import { StatePanel } from "@/components/shared/state-panel";
 import { renderSessionGate } from "@/components/shared/session-gate";
 import { useCrmSearch } from "@/components/providers/crm-search-provider";
 import { useRealtimeRefresh } from "@/hooks/use-realtime-refresh";
 import { useSession } from "@/hooks/use-session";
+import { LoadingRows } from "@/components/shared/loading-skeleton";
+import { EmployeesSkeleton } from "@/components/shared/skeleton";
 import { apiGet, apiPost } from "@/lib/api";
 import type { CRMUser, Department } from "@/types/crm";
+import { showToast } from "@/hooks/use-toast";
 type PaginatedResponse<T> = { items: T[]; total: number; hasMore: boolean; nextOffset: number };
 
 function Surface({ children }: { children: ReactNode }) {
@@ -35,8 +39,11 @@ export default function DepartmentsPage() {
   const [dataLoading, setDataLoading] = useState(true);
   const [hasMoreDepartments, setHasMoreDepartments] = useState(false);
   const [nextDepartmentOffset, setNextDepartmentOffset] = useState(0);
+  const [smartPasteText, setSmartPasteText] = useState("");
   const [loadingMoreDepartments, setLoadingMoreDepartments] = useState(false);
   const [error, setError] = useState("");
+  const [expandedDepartmentId, setExpandedDepartmentId] =
+  useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({
@@ -46,6 +53,10 @@ export default function DepartmentsPage() {
     headId: "",
   });
   const { globalSearch, searchSubmitted } = useCrmSearch();
+  const leaderOptions = useMemo(
+    () => [{ value: "", label: "Select department head" }, ...leaders.map((leader) => ({ value: leader.id, label: `${leader.name} - ${leader.role}` }))],
+    [leaders]
+  );
 
   const fieldStyle = {
     borderColor: "var(--border)",
@@ -70,7 +81,7 @@ export default function DepartmentsPage() {
       try {
         await loadData(false);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load departments");
+        showToast(err instanceof Error ? err.message : "Failed to load departments" , "error");
       } finally {
         setDataLoading(false);
       }
@@ -98,13 +109,40 @@ export default function DepartmentsPage() {
         headId: "",
       });
       await loadData(false);
-      setNotice("Department created successfully.");
+      showToast("Department created successfully.", "success");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create department");
+      showToast(err instanceof Error ? err.message : "Failed to create department" , "error");
     } finally {
       setCreating(false);
     }
   };
+
+  function handleDepartmentSmartPaste() {
+  const text = smartPasteText;
+
+  const name =
+    text.match(/Department:\s*(.+)/i)?.[1]?.trim() ?? "";
+
+  const code =
+    text.match(/Code:\s*(.+)/i)?.[1]?.trim() ?? "";
+
+  const description =
+    text.match(
+      /Description:\s*([\s\S]*)/i
+    )?.[1]?.trim() ?? "";
+
+  setForm((current) => ({
+    ...current,
+    name,
+    code,
+    description,
+  }));
+
+  showToast(
+    "Department fields auto-filled",
+    "success"
+  );
+}
 
   const departmentAnalytics = useMemo(() => {
     const total = departments.length;
@@ -142,6 +180,14 @@ export default function DepartmentsPage() {
   if (!user) {
     return null;
   }
+
+  if (dataLoading) {
+  return (
+    <CRMShell user={user}>
+      <EmployeesSkeleton />
+    </CRMShell>
+  );
+}
 
   return (
     <CRMShell user={user}>
@@ -181,6 +227,83 @@ export default function DepartmentsPage() {
               Create department
             </p>
             <h2 className="mt-2 text-xl font-semibold text-[var(--text-main)]">Add a new business unit</h2>
+            <div className="mt-4 space-y-3">
+
+  <p className="text-xs text-[var(--text-soft)]">
+    Copy the template below, fill it, then paste it into Smart Paste.
+  </p>
+
+  <textarea
+    readOnly
+    onClick={(e) => {
+      navigator.clipboard.writeText(
+        (e.target as HTMLTextAreaElement).value
+      );
+
+      showToast(
+        "Template copied",
+        "success"
+      );
+    }}
+    className="min-h-28 w-full rounded-2xl border px-3 py-3 text-sm"
+    style={fieldStyle}
+    value={`Department: Technical
+
+Code: TECH
+
+Description:
+Handles frontend, backend and infrastructure`}
+  />
+
+  <textarea
+    className="min-h-32 w-full rounded-2xl border px-4 py-3 text-sm outline-none"
+    style={fieldStyle}
+    placeholder="Paste completed template here..."
+    value={smartPasteText}
+    onChange={(e) =>
+      setSmartPasteText(
+        e.target.value
+      )
+    }
+  />
+
+  <button
+    type="button"
+    onClick={handleDepartmentSmartPaste}
+    className="rounded-xl px-4 py-2 text-sm font-semibold text-white"
+    style={{
+      background:
+        "var(--accent-strong)",
+    }}
+  >
+    ✨ Auto-fill Department
+  </button>
+
+  <div
+    className="rounded-2xl border p-4 text-sm"
+    style={fieldStyle}
+  >
+    <p className="font-semibold">
+      Preview
+    </p>
+
+    <p className="mt-3">
+      <strong>Name:</strong>{" "}
+      {smartPasteText.match(/Department:\s*(.+)/i)?.[1] || "-"}
+    </p>
+
+    <p>
+      <strong>Code:</strong>{" "}
+      {smartPasteText.match(/Code:\s*(.+)/i)?.[1] || "-"}
+    </p>
+
+    <p>
+      <strong>Description:</strong>{" "}
+      {smartPasteText.match(/Description:\s*([\s\S]*)/i)?.[1] || "-"}
+    </p>
+  </div>
+
+</div>
 
             <div className="mt-5 grid gap-4">
               <input
@@ -206,19 +329,13 @@ export default function DepartmentsPage() {
                   setForm((current) => ({ ...current, description: event.target.value }))
                 }
               />
-              <select
-                className="h-12 rounded-2xl border px-4 outline-none"
-                style={fieldStyle}
+              <ResponsiveSelect
                 value={form.headId}
-                onChange={(event) => setForm((current) => ({ ...current, headId: event.target.value }))}
-              >
-                <option value="">Select department head</option>
-                {leaders.map((leader) => (
-                  <option key={leader.id} value={leader.id}>
-                    {leader.name} - {leader.role}
-                  </option>
-                ))}
-              </select>
+                onChange={(value) => setForm((current) => ({ ...current, headId: value }))}
+                options={leaderOptions}
+                ariaLabel="Select department head"
+                buttonClassName="h-12 px-4"
+              />
 
               {error ? <p className="text-sm font-medium text-rose-600">{error}</p> : null}
               {notice ? <p className="text-sm font-medium text-emerald-600">{notice}</p> : null}
@@ -251,10 +368,20 @@ export default function DepartmentsPage() {
             <div className="mt-6 grid gap-4 md:grid-cols-2">
               {visibleDepartments.map((department) => (
                 <article
-                  key={department.id}
-                  className="rounded-[18px] border p-4"
-                  style={{ borderColor: "var(--border)", background: "var(--surface-soft)" }}
-                >
+  key={department.id}
+  onClick={() =>
+    setExpandedDepartmentId(
+      expandedDepartmentId === department.id
+        ? null
+        : department.id
+    )
+  }
+  className="cursor-pointer rounded-[18px] border p-4 transition hover:border-blue-500"
+  style={{
+    borderColor: "var(--border)",
+    background: "var(--surface-soft)",
+  }}
+>
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-faint)]">
@@ -280,6 +407,43 @@ export default function DepartmentsPage() {
                   <p className="mt-1 text-sm font-medium text-[var(--text-main)]">
                     {department.head?.name || "Not assigned"}
                   </p>
+                  {expandedDepartmentId === department.id && (
+  <div
+    className="mt-4 border-t pt-4"
+    style={{ borderColor: "var(--border)" }}
+  >
+    <div className="grid gap-3">
+
+      <div>
+        <p className="text-xs text-[var(--text-faint)]">
+          Description
+        </p>
+        <p className="text-sm text-[var(--text-main)]">
+          {department.description || "No description"}
+        </p>
+      </div>
+
+      <div>
+        <p className="text-xs text-[var(--text-faint)]">
+          Department Code
+        </p>
+        <p className="text-sm text-[var(--text-main)]">
+          {department.code}
+        </p>
+      </div>
+
+      <div>
+        <p className="text-xs text-[var(--text-faint)]">
+          Department Head
+        </p>
+        <p className="text-sm text-[var(--text-main)]">
+          {department.head?.name || "Not assigned"}
+        </p>
+      </div>
+
+    </div>
+  </div>
+)}
                 </article>
               ))}
             </div>

@@ -54,6 +54,7 @@ export type CRMUser = {
   id: string;
   name: string;
   email: string;
+  avatarUrl?: string | null;
   role: UserRole;
   designation?: string | null;
   departmentId?: string | null;
@@ -66,6 +67,7 @@ export type CRMUser = {
     role: UserRole;
   } | null;
   createdAt?: string;
+  authProvider?: "google" | "password";
 };
 
 export type ChatRoom = {
@@ -78,6 +80,8 @@ export type ChatRoom = {
     id: string;
     name: string;
     role: UserRole;
+    avatarUrl?: string | null;
+    authProvider?: "google" | "password";
   } | null;
   unreadCount?: number;
   lastMessagePreview?: string;
@@ -112,6 +116,8 @@ export type ChatGroupMember = {
     name: string;
     email: string;
     role: UserRole;
+    avatarUrl?: string | null;
+    authProvider?: "google" | "password";
   };
   createdAt: string;
 };
@@ -140,6 +146,8 @@ export type ChatMessage = {
       name: string;
       email: string;
       role: UserRole;
+      avatarUrl?: string | null;
+      authProvider?: "google" | "password";
     };
   } | null;
   createdAt: string;
@@ -148,6 +156,8 @@ export type ChatMessage = {
     name: string;
     email: string;
     role: UserRole;
+    avatarUrl?: string | null;
+    authProvider?: "google" | "password";
   };
 };
 
@@ -550,3 +560,131 @@ export type ActivityLogsResponse = {
   hasMore: boolean;
   nextOffset: number;
 };
+
+export type CredentialStatus = "UNKNOWN" | "VALID" | "EXPIRING_SOON" | "EXPIRED";
+
+export type CredentialUsage = {
+  id: string;
+  credentialId: string;
+  projectId?: string | null;
+  projectName?: string | null;
+  displayName?: string;
+  environment?: string | null;
+  envKey?: string | null;
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  project?: {
+    id: string;
+    name: string;
+    department?: {
+      id: string;
+      name: string;
+      code: string;
+    } | null;
+  } | null;
+};
+
+export type Credential = {
+  id: string;
+  name: string;
+  provider?: string | null;
+  envKey?: string | null;
+  validityDays?: number | null;
+  expiresAt?: string | null;
+  rotatedAt?: string | null;
+  notes?: string | null;
+  createdById?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  createdBy?: {
+    id: string;
+    name: string;
+    email: string;
+    role: UserRole;
+  } | null;
+  usages: CredentialUsage[];
+  derivedExpiresAt?: string | null;
+  status: CredentialStatus;
+  daysLeft: number | null;
+};
+
+// ─── Checklist Module Types ──────────────────────────────────────────────────
+
+export type ChecklistItemStatus = "PENDING" | "COMPLETED";
+
+export type ChecklistCategorySummary = {
+  id: string;
+  name: string;
+  sortOrder: number;
+  totalItems: number;
+  completedItems: number;
+};
+
+export type ChecklistRecord = {
+  id: string | null;
+  employeeId: string;
+  checklistItemId: string;
+  status: ChecklistItemStatus;
+  note?: string | null;
+  completedAt?: string | null;
+  updatedAt?: string | null;
+  updatedBy?: {
+    id: string;
+    name: string;
+    role: UserRole;
+  } | null;
+  checklistItem: {
+    id: string;
+    name: string;
+    sortOrder: number;
+    categoryId: string;
+  };
+};
+
+export type ChecklistCategoryDetail = {
+  id: string;
+  name: string;
+  sortOrder: number;
+  items: ChecklistRecord[];
+  totalItems: number;
+  completedItems: number;
+};
+
+export type ChecklistAdminSummary = {
+  id: string;
+  name: string;
+  email: string;
+  avatarUrl?: string | null;
+  authProvider?: "google" | "password";
+  role: UserRole;
+  designation?: string | null;
+  department?: { id: string; name: string } | null;
+  createdAt?: string;
+  totalItems: number;
+  completedItems: number;
+  completionPercent: number;
+};
+
+export type ChecklistEmployeeDetail = {
+  employee: ChecklistAdminSummary;
+  categories: ChecklistCategoryDetail[];
+};
+
+export type ChecklistActivityItem = {
+  id: string;
+  employeeId: string;
+  checklistItemId?: string | null;
+  action: string;
+  details?: string | null;
+  actorId: string;
+  createdAt: string;
+};
+
+export type ChecklistActivityResponse = {
+  items: ChecklistActivityItem[];
+  total: number;
+  hasMore: boolean;
+  nextOffset: number;
+};
+
